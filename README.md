@@ -2,7 +2,8 @@
 [![codecov](https://codecov.io/gh/compiler-explorer/compiler-explorer/branch/main/graph/badge.svg)](https://codecov.io/gh/compiler-explorer/compiler-explorer)
 
 
-![image](https://user-images.githubusercontent.com/11953157/120336339-d4b80200-c324-11eb-8a62-7aebbb65a07a.png)
+![image](https://user-images.githubusercontent.com/11953157/120695427-f6101e00-c4dd-11eb-87b5-082fe000c01f.png)
+
 
 
 # Compiler Explorer - for DELPHI, Free Pascal, and C++ BUILDER.
