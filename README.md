@@ -8,7 +8,7 @@
 
 # Compiler Explorer - for DELPHI, Free Pascal, and C++ BUILDER.
 
-[See **Windows install** guideline for Delphi & fpc here](https://github.com/pmcgee69/compiler-explorer/blob/main/Delphi%20&%20C++Builder%20Specifics.md)
+[See **__Windows install__** guideline for Delphi & fpc here](https://github.com/pmcgee69/compiler-explorer/blob/main/Delphi%20&%20C++Builder%20Specifics.md)
 
 ---
 
