@@ -6,9 +6,10 @@
 
 
 
-# Compiler Explorer - for DELPHI, Free Pascal, and C++ BUILDER.
+# Compiler Explorer 
+#  - for DELPHI, Free Pascal, and C++ BUILDER.
 
-[See **_Windows install_** guideline for Delphi & fpc **_here_**](https://github.com/pmcgee69/compiler-explorer/blob/main/Delphi%20&%20C++Builder%20Specifics.md)
+[See **_Windows install_** guideline for Delphi & fpc **_here_**](https://github.com/pmcgee69/compiler-explorer/blob/CE-for-Win-Pascal/Delphi%20%26%20C%2B%2BBuilder%20Specifics.md)
 
 ---
 
