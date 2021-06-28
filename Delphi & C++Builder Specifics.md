@@ -13,7 +13,9 @@ In the directory, run :
 - npm update webpack
 
 Substitute the following files from this repo :  (make changes to directories and installed versions as necessary)
-- \lib\languages.js   -  Comment out languages as desired.  
+- \lib\languages.js   -  Comment out languages as desired. 
+(or compare to, or use, ...)
+- \lib\languages.PasWin.js 
 
 For Object Pascal compilers :  
 - \lib\compilers\pascal.js
