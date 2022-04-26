@@ -4,7 +4,9 @@ Installation:
 - Install latest Node.js  ( my current = v14.17.0 )
 - Install latest npm      ( my current = 7.14.0 )
 
-- Clone the main Compiler Explorer repository into a directory : https://github.com/compiler-explorer/compiler-explorer 
+- Clone this branch of Compiler Explorer repository into a directory : https://github.com/compiler-explorer/compiler-explorer 
+
+  ie https://github.com/pmcgee69/compiler-explorer/edit/CE-for-Win-Pascal
 
 In the directory, run :
 - npm install
@@ -12,9 +14,10 @@ In the directory, run :
 - npm install webpack-cli -g
 - npm update webpack
 
-Substitute the following files from this repo :  (make changes to directories and installed versions as necessary)
+
+You may need to fix up some directories ... maybe comment out eg the C++ options.  Changes were made to the following files from this repo :
+
 - \lib\languages.js   -  Comment out languages as desired. 
-(or compare to, or use, ...)
 - \lib\languages.PasWin.js 
 
 For Object Pascal compilers :  
