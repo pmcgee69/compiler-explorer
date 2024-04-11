@@ -34,6 +34,9 @@ import {MonacoPaneState} from './pane.interfaces.js';
 import {ga} from '../analytics.js';
 import {extendConfig} from '../monaco-config.js';
 import {Hub} from '../hub.js';
+import {CompilationResult} from '../compilation/compilation.interfaces.js';
+import {CompilerInfo} from '../compiler.interfaces.js';
+import {unwrap} from '../assert.js';
 
 export class Opt extends MonacoPane<monaco.editor.IStandaloneCodeEditor, OptState> {
     currentDecorations: string[] = [];
@@ -52,8 +55,8 @@ export class Opt extends MonacoPane<monaco.editor.IStandaloneCodeEditor, OptStat
         return $('#opt').html();
     }
 
-    override createEditor(editorRoot: HTMLElement): monaco.editor.IStandaloneCodeEditor {
-        return monaco.editor.create(
+    override createEditor(editorRoot: HTMLElement): void {
+        this.editor = monaco.editor.create(
             editorRoot,
             extendConfig({
                 language: 'plaintext',
@@ -61,6 +64,10 @@ export class Opt extends MonacoPane<monaco.editor.IStandaloneCodeEditor, OptStat
                 glyphMargin: true,
             }),
         );
+    }
+
+    override getPrintName() {
+        return 'Out Output';
     }
 
     override registerOpeningAnalyticsEvent() {
@@ -83,9 +90,9 @@ export class Opt extends MonacoPane<monaco.editor.IStandaloneCodeEditor, OptStat
         });
     }
 
-    override onCompileResult(id: number, compiler, result) {
+    override onCompileResult(id: number, compiler: CompilerInfo, result: CompilationResult) {
         if (this.compilerInfo.compilerId !== id || !this.isCompilerSupported) return;
-        this.editor.setValue(result.source);
+        this.editor.setValue(unwrap(result.source));
         if (result.hasOptOutput) {
             this.showOptResults(result.optOutput);
         }
@@ -155,7 +162,7 @@ export class Opt extends MonacoPane<monaco.editor.IStandaloneCodeEditor, OptStat
         this.currentDecorations = this.editor.deltaDecorations(this.currentDecorations, opt);
     }
 
-    override onCompiler(id: number, compiler) {
+    override onCompiler(id: number, compiler: CompilerInfo | null, options: string, editorId: number, treeId: number) {
         if (id === this.compilerInfo.compilerId) {
             this.compilerInfo.compilerName = compiler ? compiler.name : '';
             this.updateTitle();
@@ -165,6 +172,9 @@ export class Opt extends MonacoPane<monaco.editor.IStandaloneCodeEditor, OptStat
             }
         }
     }
+
+    // Don't do anything for this pane
+    override sendPrintData() {}
 
     override close() {
         this.eventHub.unsubscribe();

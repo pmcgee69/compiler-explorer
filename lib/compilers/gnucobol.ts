@@ -22,16 +22,14 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import _ from 'underscore';
-
 import path from 'path';
 
-import type {CompilationResult, ExecutionOptions} from '../../types/compilation/compilation.interfaces.js';
+import type {ExecutionOptions} from '../../types/compilation/compilation.interfaces.js';
 import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
 import {BaseCompiler} from '../base-compiler.js';
-import * as utils from '../utils.js';
 import {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
 import {CompilationEnvironment} from '../compilation-env.js';
+import {GnuCobolParser} from './argument-parsers.js';
 
 export class GnuCobolCompiler extends BaseCompiler {
     private readonly configDir: string;
@@ -53,17 +51,21 @@ export class GnuCobolCompiler extends BaseCompiler {
     }
 
     override optionsForFilter(filters: ParseFiltersAndOutputOptions, outputFilename: string) {
-        let options = ['-o', this.filename(outputFilename), '-I', this.includeDir, '-L', this.libDir];
-        if (!filters.binary) options = options.concat('-S');
+        let options = ['-o', this.filename(outputFilename), '-I', this.includeDir, '-L', this.libDir, '-A', '-g'];
+        if (this.compiler.intelAsm && filters.intel && !filters.binary && !filters.binaryObject) {
+            options = options.concat(this.compiler.intelAsm.split(' '));
+        }
+        if (!filters.binary && !filters.binaryObject) options = options.concat('-S');
+        else if (filters.binaryObject) options = options.concat('-c');
         else options = options.concat('-x');
         return options;
     }
 
-    override getCompilerResultLanguageId() {
+    override getCompilerResultLanguageId(filters?: ParseFiltersAndOutputOptions): string | undefined {
         return 'asm';
     }
 
-    override getDefaultExecOptions(): ExecutionOptions {
+    override getDefaultExecOptions(): ExecutionOptions & {env: Record<string, string>} {
         const result = super.getDefaultExecOptions();
         result.env.COB_CONFIG_DIR = this.configDir;
         result.env.COB_COPY_DIR = this.copyDir;
@@ -95,6 +97,26 @@ export class GnuCobolCompiler extends BaseCompiler {
         return objdumpResult;
     }
 
+    override getOutputFilename(dirPath: string, outputFilebase: string, key?: any): string {
+        let filename;
+        if (key && key.backendOptions && key.backendOptions.customOutputFilename) {
+            filename = key.backendOptions.customOutputFilename;
+        } else if (key.filters.binary) {
+            // note: interesting fact about gnucobol, if you name the outputfile output.s it will always output assembly
+            filename = outputFilebase;
+        } else if (key.filters.binaryObject) {
+            filename = `${outputFilebase}.o`;
+        } else {
+            filename = `${outputFilebase}.s`;
+        }
+
+        if (dirPath) {
+            return path.join(dirPath, filename);
+        } else {
+            return filename;
+        }
+    }
+
     override getExecutableFilename(dirPath: string, outputFilebase: string) {
         return path.join(dirPath, outputFilebase);
     }
@@ -105,5 +127,9 @@ export class GnuCobolCompiler extends BaseCompiler {
 
     override getSharedLibraryLinks(libraries: any[]): string[] {
         return [];
+    }
+
+    protected override getArgumentParser() {
+        return GnuCobolParser;
     }
 }

@@ -62,7 +62,7 @@ export class FPCCompiler extends BaseCompiler {
         return [];
     }
 
-    override processAsm(result, filters) {
+    override async processAsm(result, filters) {
         // TODO: Pascal doesn't have a demangler exe, it's the only compiler that's weird like this
         this.demangler = new (unwrap(this.demanglerClass))(null as any, this);
         return this.asm.process(result.asm, filters);
@@ -90,7 +90,7 @@ export class FPCCompiler extends BaseCompiler {
             options = options.concat(this.compiler.intelAsm.split(' '));
         }
 
-        filters.preProcessLines = _.bind(this.preProcessLines, this);
+        filters.preProcessLines = this.preProcessLines.bind(this);
 
         if (filters.binary) {
             filters.dontMaskFilenames = true;
@@ -132,10 +132,12 @@ export class FPCCompiler extends BaseCompiler {
         if (relevantAsmStartsAt !== -1) {
             const lastLinefeedBeforeStart = input.lastIndexOf('\n', relevantAsmStartsAt);
             if (lastLinefeedBeforeStart === -1) {
-                input = input.substr(0, input.indexOf('00000000004')) + '\n' + input.substr(relevantAsmStartsAt);
+                input = input.substring(0, input.indexOf('00000000004')) + '\n' + input.substring(relevantAsmStartsAt);
             } else {
                 input =
-                    input.substr(0, input.indexOf('00000000004')) + '\n' + input.substr(lastLinefeedBeforeStart + 1);
+                    input.substring(0, input.indexOf('00000000004')) +
+                    '\n' +
+                    input.substring(lastLinefeedBeforeStart + 1);
             }
         }
         return input;
@@ -186,7 +188,7 @@ export class FPCCompiler extends BaseCompiler {
         compiler: string,
         options: string[],
         inputFilename: string,
-        execOptions: ExecutionOptions,
+        execOptions: ExecutionOptions & {env: Record<string, string>},
     ) {
         if (!execOptions) {
             execOptions = this.getDefaultExecOptions();
@@ -198,7 +200,7 @@ export class FPCCompiler extends BaseCompiler {
         const projectFile = path.join(dirPath, this.dprFilename);
         execOptions.customCwd = dirPath;
         if (this.nasmPath) {
-            execOptions.env = _.clone(process.env);
+            execOptions.env = _.clone(process.env) as Record<string, string>;
             execOptions.env.PATH = execOptions.env.PATH + ':' + this.nasmPath;
         }
 
@@ -229,14 +231,14 @@ export class FPCCompiler extends BaseCompiler {
     getExtraAsmHint(asm: string, currentFileId: number) {
         if (asm.startsWith('# [')) {
             const bracketEndPos = asm.indexOf(']', 3);
-            let valueInBrackets = asm.substr(3, bracketEndPos - 3);
+            let valueInBrackets = asm.substring(3, bracketEndPos);
             const colonPos = valueInBrackets.indexOf(':');
             if (colonPos !== -1) {
-                valueInBrackets = valueInBrackets.substr(0, colonPos - 1);
+                valueInBrackets = valueInBrackets.substring(0, colonPos - 1);
             }
 
             if (valueInBrackets.startsWith('/')) {
-                valueInBrackets = valueInBrackets.substr(1);
+                valueInBrackets = valueInBrackets.substring(1);
             }
 
             if (Number.isNaN(Number(valueInBrackets))) {
@@ -254,14 +256,14 @@ export class FPCCompiler extends BaseCompiler {
     tryGetFilenumber(asm: string, files: Record<string, number>) {
         if (asm.startsWith('# [')) {
             const bracketEndPos = asm.indexOf(']', 3);
-            let valueInBrackets = asm.substr(3, bracketEndPos - 3);
+            let valueInBrackets = asm.substring(3, bracketEndPos);
             const colonPos = valueInBrackets.indexOf(':');
             if (colonPos !== -1) {
-                valueInBrackets = valueInBrackets.substr(0, colonPos - 1);
+                valueInBrackets = valueInBrackets.substring(0, colonPos - 1);
             }
 
             if (valueInBrackets.startsWith('/')) {
-                valueInBrackets = valueInBrackets.substr(1);
+                valueInBrackets = valueInBrackets.substring(1);
             }
 
             if (Number.isNaN(Number(valueInBrackets))) {

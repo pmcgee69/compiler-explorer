@@ -22,6 +22,15 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import {describe, expect, it} from 'vitest';
+
+import {
+    getToolchainFlagFromOptions,
+    getToolchainPathWithOptionsArr,
+    hasToolchainArg,
+    removeToolchainArg,
+    replaceToolchainArg,
+} from '../lib/toolchain-utils.js';
 import {CompilerDropinTool} from '../lib/tooling/compiler-dropin-tool.js';
 
 import {path} from './utils.js';
@@ -42,7 +51,7 @@ describe('CompilerDropInTool', () => {
         const sourcefile = 'example.cpp';
 
         const orderedArgs = tool.getOrderedArguments(compilationInfo, includeflags, [], args, sourcefile);
-        orderedArgs.should.deep.equal([
+        expect(orderedArgs).toEqual([
             '--gcc-toolchain=/opt/compiler-explorer/gcc-7.2.0',
             '--gcc-toolchain=/opt/compiler-explorer/gcc-7.2.0',
         ]);
@@ -63,7 +72,7 @@ describe('CompilerDropInTool', () => {
         const sourcefile = 'example.cpp';
 
         const orderedArgs = tool.getOrderedArguments(compilationInfo, includeflags, [], args, sourcefile);
-        orderedArgs.should.deep.equal([
+        expect(orderedArgs).toEqual([
             '--gcc-toolchain=' + path.resolve('/opt/compiler-explorer/gcc-8.0'),
             '--gcc-toolchain=' + path.resolve('/opt/compiler-explorer/gcc-8.0'),
         ]);
@@ -84,7 +93,7 @@ describe('CompilerDropInTool', () => {
         const sourcefile = 'example.cpp';
 
         const orderedArgs = tool.getOrderedArguments(compilationInfo, includeflags, [], args, sourcefile);
-        orderedArgs.should.deep.equal(false);
+        expect(orderedArgs).toEqual(false);
     });
 
     it('Should support ICC compilers', () => {
@@ -102,7 +111,7 @@ describe('CompilerDropInTool', () => {
         const sourcefile = 'example.cpp';
 
         const orderedArgs = tool.getOrderedArguments(compilationInfo, includeflags, [], args, sourcefile);
-        orderedArgs.should.deep.equal([
+        expect(orderedArgs).toEqual([
             '--gcc-toolchain=' + path.resolve('/opt/compiler-explorer/gcc-8.2.0'),
             '--gcc-toolchain=' + path.resolve('/opt/compiler-explorer/gcc-8.2.0'),
         ]);
@@ -126,7 +135,7 @@ describe('CompilerDropInTool', () => {
         const sourcefile = 'example.cpp';
 
         const orderedArgs = tool.getOrderedArguments(compilationInfo, includeflags, [], args, sourcefile);
-        orderedArgs.should.deep.equal(false);
+        expect(orderedArgs).toEqual(false);
     });
 
     it('Should not support using libc++', () => {
@@ -145,7 +154,7 @@ describe('CompilerDropInTool', () => {
         const sourcefile = 'example.cpp';
 
         const orderedArgs = tool.getOrderedArguments(compilationInfo, includeflags, [], args, sourcefile);
-        orderedArgs.should.deep.equal(false);
+        expect(orderedArgs).toEqual(false);
     });
 
     it('Should support library options', () => {
@@ -165,11 +174,69 @@ describe('CompilerDropInTool', () => {
         const libOptions = ['-DMYLIBDEF', '-pthread'];
 
         const orderedArgs = tool.getOrderedArguments(compilationInfo, includeflags, libOptions, args, sourcefile);
-        orderedArgs.should.deep.equal([
+        expect(orderedArgs).toEqual([
             '--gcc-toolchain=/opt/compiler-explorer/gcc-8.2.0',
             '--gcc-toolchain=/opt/compiler-explorer/gcc-8.2.0',
             '-DMYLIBDEF',
             '-pthread',
+        ]);
+    });
+
+    it('More toolchain magic', () => {
+        const options = [
+            '-gdwarf-4',
+            '-g',
+            '-o',
+            'output.s',
+            '-mllvm',
+            '--x86-asm-syntax=intel',
+            '-S',
+            '--gcc-toolchain=/opt/compiler-explorer/gcc-12.2.0',
+            '-fcolor-diagnostics',
+            '-fno-crash-diagnostics',
+            '/app/example.cpp',
+        ];
+
+        expect(hasToolchainArg(options)).toBe(true);
+
+        expect(getToolchainFlagFromOptions(options)).toEqual('--gcc-toolchain=');
+
+        const newOptions = removeToolchainArg(options);
+        expect(hasToolchainArg(newOptions)).toBe(false);
+    });
+
+    it('Should be able to swap toolchain', () => {
+        const exe = '/opt/compiler-explorer/clang-16.0.0/bin/clang++';
+        const options = [
+            '-gdwarf-4',
+            '-g',
+            '-o',
+            'output.s',
+            '-mllvm',
+            '--x86-asm-syntax=intel',
+            '-S',
+            '--gcc-toolchain=/opt/compiler-explorer/gcc-12.2.0',
+            '-fcolor-diagnostics',
+            '-fno-crash-diagnostics',
+            '/app/example.cpp',
+        ];
+
+        const toolchain = getToolchainPathWithOptionsArr(exe, options);
+        expect(toolchain).toEqual('/opt/compiler-explorer/gcc-12.2.0');
+
+        const replacedOptions = replaceToolchainArg(options, '/opt/compiler-explorer/gcc-11.1.0');
+        expect(replacedOptions).toEqual([
+            '-gdwarf-4',
+            '-g',
+            '-o',
+            'output.s',
+            '-mllvm',
+            '--x86-asm-syntax=intel',
+            '-S',
+            '--gcc-toolchain=/opt/compiler-explorer/gcc-11.1.0',
+            '-fcolor-diagnostics',
+            '-fno-crash-diagnostics',
+            '/app/example.cpp',
         ]);
     });
 });

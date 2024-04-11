@@ -143,6 +143,8 @@ export class AssemblyCompiler extends BaseCompiler {
         buildFilters.binary = true;
         buildFilters.execute = false;
 
+        const overrides = this.sanitizeCompilerOverrides(key.backendOptions.overrides || []);
+
         const compilerArguments = _.compact(
             this.prepareArguments(
                 key.options,
@@ -151,13 +153,15 @@ export class AssemblyCompiler extends BaseCompiler {
                 inputFilename,
                 outputFilename,
                 key.libraries,
+                overrides,
             ),
         );
 
-        const execOptions = this.getDefaultExecOptions();
-        execOptions.ldPath = this.getSharedLibraryPathsAsLdLibraryPaths(key.libraries);
-
         const downloads = await buildEnvironment;
+
+        const execOptions = this.getDefaultExecOptions();
+        execOptions.ldPath = this.getSharedLibraryPathsAsLdLibraryPaths(key.libraries, dirPath);
+
         const result = await this.buildExecutable(key.compiler.exe, compilerArguments, inputFilename, execOptions);
 
         const fullResult: BuildResult = {

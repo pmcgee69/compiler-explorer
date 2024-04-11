@@ -23,15 +23,16 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 import Semver from 'semver';
-import _ from 'underscore';
 
 import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
 import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import type {ResultLine} from '../../types/resultline/resultline.interfaces.js';
 import {BaseCompiler} from '../base-compiler.js';
 import {asSafeVer} from '../utils.js';
 
 import {ISPCParser} from './argument-parsers.js';
 import {unwrap} from '../assert.js';
+import {LLVMIrBackendOptions} from '../../types/compilation/ir.interfaces.js';
 
 export class ISPCCompiler extends BaseCompiler {
     static get key() {
@@ -56,18 +57,29 @@ export class ISPCCompiler extends BaseCompiler {
         return options;
     }
 
-    override async generateIR(inputFilename: string, options: string[], filters: ParseFiltersAndOutputOptions) {
-        const newOptions = [...options, ...unwrap(this.compiler.irArg), '-o', this.getIrOutputFilename(inputFilename)];
-        return super.generateIR(inputFilename, newOptions, filters);
+    override async generateIR(
+        inputFilename: string,
+        options: string[],
+        irOptions: LLVMIrBackendOptions,
+        produceCfg: boolean,
+        filters: ParseFiltersAndOutputOptions,
+    ) {
+        const newOptions = [
+            ...options,
+            ...unwrap(this.compiler.irArg),
+            '-o',
+            this.getIrOutputFilename(inputFilename, filters),
+        ];
+        return super.generateIR(inputFilename, newOptions, irOptions, produceCfg, filters);
     }
 
     override getArgumentParser() {
         return ISPCParser;
     }
 
-    override async generateAST(inputFilename, options) {
+    override async generateAST(inputFilename, options): Promise<ResultLine[]> {
         // These options make Clang produce an AST dump
-        const newOptions = _.filter(options, option => option !== '--colored-output').concat(['--ast-dump']);
+        const newOptions = options.filter(option => option !== '--colored-output').concat(['--ast-dump']);
 
         const execOptions = this.getDefaultExecOptions();
         // A higher max output is needed for when the user includes headers

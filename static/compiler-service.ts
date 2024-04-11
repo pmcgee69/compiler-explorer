@@ -23,9 +23,8 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 import $ from 'jquery';
-import * as Sentry from '@sentry/browser';
 import _ from 'underscore';
-import LRU from 'lru-cache';
+import {LRUCache} from 'lru-cache';
 import {EventEmitter} from 'golden-layout';
 
 import {options} from './options.js';
@@ -38,18 +37,19 @@ import {CompilerInfo} from '../types/compiler.interfaces.js';
 import {CompilationResult, FiledataPair} from '../types/compilation/compilation.interfaces.js';
 import {CompilationStatus} from './compiler-service.interfaces.js';
 import {IncludeDownloads, SourceAndFiles} from './download-service.js';
+import {SentryCapture} from './sentry.js';
 
 const ASCII_COLORS_RE = new RegExp(/\x1B\[[\d;]*m(.\[K)?/g);
 
 export class CompilerService {
     private readonly base = window.httpRoot;
     private allowStoreCodeDebug: boolean;
-    cache: LRU<string, CompilationResult>;
+    private cache: LRUCache<string, CompilationResult>;
     private readonly compilersByLang: Record<string, Record<string, CompilerInfo>>;
 
     constructor(eventHub: EventEmitter) {
         this.allowStoreCodeDebug = true;
-        this.cache = new LRU({
+        this.cache = new LRUCache({
             maxSize: 200 * 1024,
             sizeCalculation: n => JSON.stringify(n).length,
         });
@@ -123,7 +123,7 @@ export class CompilerService {
                 }
             }
         } catch (e) {
-            Sentry.captureException(e);
+            SentryCapture(e, 'processFromLangAndCompiler');
         }
         // TODO: What now? Found no compilers!
         return {
@@ -133,16 +133,15 @@ export class CompilerService {
     }
 
     public getGroupsInUse(langId: string): {value: string; label: string}[] {
-        return _.chain(this.getCompilersForLang(langId))
-            .map((compiler: CompilerInfo) => compiler)
-            .uniq(false, compiler => compiler.group)
+        return _.uniq(Object.values(this.getCompilersForLang(langId) ?? {}), false, compiler => compiler.group)
             .map(compiler => {
                 return {value: compiler.group, label: compiler.groupName || compiler.group};
             })
-            .sort((a, b) => {
-                return a.label.localeCompare(b.label, undefined /* Ignore language */, {sensitivity: 'base'}) === 0;
-            })
-            .value();
+            .sort((a, b) =>
+                a.label.localeCompare(b.label, undefined /* Ignore language */, {
+                    sensitivity: 'base',
+                }),
+            );
     }
 
     getCompilersForLang(langId: string): Record<string, CompilerInfo> | undefined {
@@ -214,7 +213,7 @@ export class CompilerService {
     public async submit(request: Record<string, any>) {
         request.allowStoreCodeDebug = this.allowStoreCodeDebug;
         const jsonRequest = JSON.stringify(request);
-        if (options.doCache) {
+        if (options.doCache && !request.bypassCache) {
             const cachedResult = this.cache.get(jsonRequest);
             if (cachedResult) {
                 return {
@@ -252,7 +251,7 @@ export class CompilerService {
     public submitCMake(request: Record<string, any>) {
         request.allowStoreCodeDebug = this.allowStoreCodeDebug;
         const jsonRequest = JSON.stringify(request);
-        if (options.doCache) {
+        if (options.doCache && !request.bypassCache) {
             const cachedResult = this.cache.get(jsonRequest);
             if (cachedResult) {
                 return Promise.resolve({
@@ -318,20 +317,20 @@ export class CompilerService {
     }
 
     public async expandToFiles(source: string): Promise<SourceAndFiles> {
-        const includes = new IncludeDownloads();
+        const includesOrEmbeds = new IncludeDownloads();
 
-        const includeFind = /^\s*#\s*include\s*["<](https?:\/\/[^">]+)[">]/;
+        const includeOrEmbedFind = /^\s*#\s*(include|embed)\s*["<](https?:\/\/[^">]+)[">]/;
         const lines = source.split('\n');
         for (const idx in lines) {
             const line = lines[idx];
-            const match = line.match(includeFind);
+            const match = line.match(includeOrEmbedFind);
             if (match) {
-                const download = includes.include(match[1]);
-                lines[idx] = `#include "${download.filename}"`;
+                const download = includesOrEmbeds.include(match[2]);
+                lines[idx] = line.replace(includeOrEmbedFind, `#${match[1]} "${download.filename}"`);
             }
         }
 
-        const files: FiledataPair[] = await includes.allDownloadsAsFileDataPairs();
+        const files: FiledataPair[] = await includesOrEmbeds.allDownloadsAsFileDataPairs();
 
         return {
             source: lines.join('\n'),
@@ -344,6 +343,7 @@ export class CompilerService {
     }
 
     public static doesCompilationResultHaveWarnings(result: CompilationResult) {
+        // TODO: Types probably need to be updated here
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         const stdout = result.stdout ?? [];
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -352,8 +352,10 @@ export class CompilerService {
         // Right now we're ignoring outputs that match the input filename
         // Compiler & Executor are capable of giving us the info, but conformance view is not
         if (stdout.length === 1 && stderr.length === 0 && result.inputFilename) {
+            // This code is a special case for MSVC which writes the filename to stdout
+            // MSVC will use back-slashes, Wine will use forward slashes
             // We could also move this calculation to the server at some point
-            const lastSlashPos = _.findLastIndex(result.inputFilename, ch => ch === '\\');
+            const lastSlashPos = _.findLastIndex(result.inputFilename, ch => ch === '\\' || ch === '/');
             return result.inputFilename.substring(lastSlashPos + 1) !== stdout[0].text;
         }
         return stdout.length > 0 || stderr.length > 0;
@@ -420,8 +422,7 @@ export class CompilerService {
                 .addClass('status-icon fas')
                 .css('color', this.getColor(status))
                 .toggle(status.code !== 0)
-                .prop('aria-label', this.getAriaLabel(status))
-                .prop('data-status', status.code)
+                .attr('aria-label', this.getAriaLabel(status))
                 .toggleClass('fa-spinner fa-spin', status.code === 4)
                 .toggleClass('fa-times-circle', status.code === 3)
                 .toggleClass('fa-check-circle', status.code === 1 || status.code === 2);

@@ -34,6 +34,9 @@ import {MonacoPaneState} from './pane.interfaces.js';
 import {ga} from '../analytics.js';
 import {extendConfig} from '../monaco-config.js';
 import {Hub} from '../hub.js';
+import {CompilerInfo} from '../compiler.interfaces.js';
+import {CompilationResult} from '../compilation/compilation.interfaces.js';
+import {unwrap} from '../assert.js';
 
 export class GnatDebugTree extends MonacoPane<monaco.editor.IStandaloneCodeEditor, GnatDebugTreeState> {
     constructor(hub: Hub, container: Container, state: GnatDebugTreeState & MonacoPaneState) {
@@ -47,8 +50,8 @@ export class GnatDebugTree extends MonacoPane<monaco.editor.IStandaloneCodeEdito
         return $('#gnatdebugtree').html();
     }
 
-    override createEditor(editorRoot: HTMLElement): monaco.editor.IStandaloneCodeEditor {
-        return monaco.editor.create(
+    override createEditor(editorRoot: HTMLElement): void {
+        this.editor = monaco.editor.create(
             editorRoot,
             extendConfig({
                 language: 'plainText',
@@ -57,6 +60,10 @@ export class GnatDebugTree extends MonacoPane<monaco.editor.IStandaloneCodeEdito
                 lineNumbersMinChars: 3,
             }),
         );
+    }
+
+    override getPrintName() {
+        return 'Gnat Debug Tree Output';
     }
 
     override registerOpeningAnalyticsEvent(): void {
@@ -78,16 +85,22 @@ export class GnatDebugTree extends MonacoPane<monaco.editor.IStandaloneCodeEdito
         this.eventHub.emit('requestSettings');
     }
 
-    override onCompileResult(compilerId: number, compiler: any, result: any): void {
+    override onCompileResult(compilerId: number, compiler: CompilerInfo, result: CompilationResult): void {
         if (this.compilerInfo.compilerId !== compilerId) return;
         if (result.hasGnatDebugTreeOutput) {
-            this.showGnatDebugTreeResults(result.gnatDebugTreeOutput);
+            this.showGnatDebugTreeResults(unwrap(result.gnatDebugTreeOutput));
         } else if (compiler.supportsGnatDebugViews) {
             this.showGnatDebugTreeResults([{text: '<No output>'}]);
         }
     }
 
-    override onCompiler(compilerId: number, compiler: any, options: any, editorId?: number, treeId?: number): void {
+    override onCompiler(
+        compilerId: number,
+        compiler: CompilerInfo | null,
+        options: string,
+        editorId?: number,
+        treeId?: number,
+    ): void {
         if (this.compilerInfo.compilerId === compilerId) {
             this.compilerInfo.compilerName = compiler ? compiler.name : '';
             this.compilerInfo.editorId = editorId;

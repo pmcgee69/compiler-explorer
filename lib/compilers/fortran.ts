@@ -24,20 +24,74 @@
 
 import path from 'path';
 
-import type {CompilationResult, ExecutionOptions} from '../../types/compilation/compilation.interfaces.js';
+import type {
+    CompilationResult,
+    CompileChildLibraries,
+    ExecutionOptions,
+} from '../../types/compilation/compilation.interfaces.js';
 import {BaseCompiler} from '../base-compiler.js';
 import * as utils from '../utils.js';
+import {GccFortranParser} from './argument-parsers.js';
+import {SelectedLibraryVersion} from '../../types/libraries/libraries.interfaces.js';
+import * as fs from 'fs';
 
 export class FortranCompiler extends BaseCompiler {
     static get key() {
         return 'fortran';
     }
 
+    protected override getArgumentParser(): any {
+        return GccFortranParser;
+    }
+
+    override getStdVerOverrideDescription(): string {
+        return 'Change the Fortran standard version of the compiler.';
+    }
+
+    getExactStaticLibNameAndPath(lib: string, libPaths: string[]): string {
+        const libFilename = 'lib' + lib + '.a';
+
+        // note: fortran doesn't use -llibname,
+        //  you have to add the full filename to the commandline instead
+        // this thus requires the libraries to be downloaded before we can figure out the compiler arguments
+        for (const dir of libPaths) {
+            const testpath = path.join(dir, libFilename);
+            if (fs.existsSync(testpath)) {
+                return testpath;
+            }
+        }
+
+        return '';
+    }
+
+    override getStaticLibraryLinks(libraries: CompileChildLibraries[], libPaths: string[] = []) {
+        return this.getSortedStaticLibraries(libraries)
+            .filter(lib => lib)
+            .map(lib => this.getExactStaticLibNameAndPath(lib, libPaths));
+    }
+
+    override getIncludeArguments(libraries: SelectedLibraryVersion[], dirPath: string): string[] {
+        const includeFlag = this.compiler.includeFlag || '-I';
+        return libraries.flatMap(selectedLib => {
+            const foundVersion = this.findLibVersion(selectedLib);
+            if (!foundVersion) return [];
+
+            const paths = foundVersion.path.map(path => includeFlag + path);
+            if (foundVersion.packagedheaders) {
+                const modPath = path.join(dirPath, selectedLib.id, 'mod');
+                const includePath = path.join(dirPath, selectedLib.id, 'include');
+                paths.push(`-I${modPath}`);
+                paths.push(includeFlag + includePath);
+            }
+            return paths;
+        });
+    }
+
     override async runCompiler(
         compiler: string,
         options: string[],
         inputFilename: string,
-        execOptions: ExecutionOptions,
+        execOptions: ExecutionOptions & {env: Record<string, string>},
     ): Promise<CompilationResult> {
         if (!execOptions) {
             execOptions = this.getDefaultExecOptions();

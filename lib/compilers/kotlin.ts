@@ -22,13 +22,16 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import {BypassCache} from '../../types/compilation/compilation.interfaces.js';
 import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import {ExecutableExecutionOptions} from '../../types/execution/execution.interfaces.js';
 import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {SimpleOutputFilenameCompiler} from '../base-compiler.js';
 
 import {KotlinParser} from './argument-parsers.js';
 import {JavaCompiler} from './java.js';
 
-export class KotlinCompiler extends JavaCompiler {
+export class KotlinCompiler extends JavaCompiler implements SimpleOutputFilenameCompiler {
     static override get key() {
         return 'kotlin';
     }
@@ -93,12 +96,12 @@ export class KotlinCompiler extends JavaCompiler {
      *
      * TODO(supergrecko): Find a better fix than this bandaid for execution
      */
-    override async handleInterpreting(key, executeParameters) {
+    override async handleInterpreting(key, executeParameters: ExecutableExecutionOptions) {
         const alteredKey = {
             ...key,
             options: ['-include-runtime', '-d', 'example.jar'],
         };
-        const compileResult = await this.getOrBuildExecutable(alteredKey);
+        const compileResult = await this.getOrBuildExecutable(alteredKey, BypassCache.None);
         executeParameters.args = [
             '-Xss136K', // Reduce thread stack size
             '-XX:CICompilerCount=2', // Reduce JIT compilation threads. 2 is minimum

@@ -73,7 +73,8 @@ To specify a compilation request as a JSON document, post it as the appropriate 
              "intel": true,
              "labels": true,
              "libraryCode": false,
-             "trim": false
+             "trim": false,
+             "debugCalls": false
         },
         "tools": [
              {"id":"clangtidytrunk", "args":"-checks=*"}
@@ -98,7 +99,18 @@ Execution Only request example:
         "userArguments": "-O3",
         "executeParameters": {
             "args": ["arg1", "arg2"],
-            "stdin": "hello, world!"
+            "stdin": "hello, world!",
+            "runtimeTools": [
+              {
+                "name": "env",
+                "options": [
+                  {
+                    "name": "MYENV",
+                    "value": "123"
+                  }
+                ]
+              }
+            ]
         },
         "compilerOptions": {
             "executorRequest": true
@@ -120,7 +132,20 @@ The filters are a JSON object with `true`/`false` values. If not supplied, defau
 filters override their default values. The `compilerOptions` is used to pass extra arguments to the back end, and is
 probably not useful for most REST users.
 
-To force a cache bypass, set `bypassCache` in the root of the request to `true`.
+To force a cache bypass, `bypassCache` can be set. This accepts an enum value according to:
+
+```ts
+export enum BypassCache {
+  None = 0,
+  Compilation = 1,
+  Execution = 2,
+}
+```
+
+If bypass compile cache is specified and an execution is to happen, the execution cache will also be bypassed.
+
+Note: `bypassCache` previously accepted a boolean. The enum values have been carefully chosen for backwards
+compatibility.
 
 Filters include `binary`, `binaryObject`, `labels`, `intel`, `directives` and `demangle`, which correspond to the UI
 buttons on the HTML version.
@@ -159,7 +184,7 @@ structure:
 
 The name property corresponds to the `<formatter>` when requesting `POST /api/format/<formatter>`. The `type` key in the
 JSON request corresponds to one of the `formatters.<key>.type` found in
-https://github.com/compiler-explorer/compiler-explorer/blob/main/etc/config/compiler-explorer.amazon.properties#L43
+[compiler-explorer.amazon.properties:43](../etc/config/compiler-explorer.amazon.properties#L43)
 
 ### `POST /api/format/<formatter>` - perform a formatter run
 
@@ -186,6 +211,20 @@ The returned JSON body has the following object structure:
 ```
 
 In cases of internal code formatter failure an additional field named `throw` is also provided and set to true.
+
+### `GET /api/asm/<instructionSet>/<opcode>` - get documentation for an opcode
+
+Returns documentation for given `opcode` in an `instructionSet` (an attribute of a compiler).
+
+```JSON
+{
+  "tooltip": "Load SIMD&FP Register (immediate offset). This instruction loads an element from memory, and writes the result as a scalar to the SIMD&FP register. The address that is used for the load is calculated from a base register value, a signed immediate offset, and an optional offset that is a multiple of the element size.",
+  "html": "<p>Load SIMD&amp;FP Register (immediate offset). This instruction loads an element from memory, and writes the result as a scalar to the SIMD&amp;FP register. The address that is used for the load is calculated from a base register value, a signed immediate offset, and an optional offset that is a multiple of the element size.</p><p>Depending on the settings in the <xref linkend=\"AArch64.cpacr_el1\">CPACR_EL1</xref>, <xref linkend=\"AArch64.cptr_el2\">CPTR_EL2</xref>, and <xref linkend=\"AArch64.cptr_el3\">CPTR_EL3</xref> registers, and the current Security state and Exception level, an attempt to execute the instruction might be trapped.</p>",
+  "url": "https://developer.arm.com/documentation/ddi0602/latest/Base-Instructions/"
+}
+```
+
+In non-JSON version, this endpoint returns only the documentation in HTML format.
 
 # Non-REST API's
 
@@ -255,9 +294,8 @@ If JSON is present in the request's `Accept` header, the compilation results are
 
 ### `POST /api/shortener` - saves given state _forever_ to a shortlink and returns the unique id for the link
 
-The body of this post should be in the format of a
-[ClientState](https://github.com/compiler-explorer/compiler-explorer/blob/main/lib/clientstate.js) Be sure that the
-Content-Type of your post is application/json
+The body of this post should be in the format of a [ClientState](../lib/clientstate.ts) Be sure that the Content-Type of
+your post is application/json
 
 An example of one the easiest forms of a clientstate:
 
@@ -333,3 +371,5 @@ Here are some examples of projects using the Compiler Explorer API:
 - [QCompilerExplorer - frontend in Qt](https://github.com/Waqar144/QCompilerExplorer) (C++)
 - [Emacs client - compiler-explorer.el](https://github.com/mkcms/compiler-explorer.el)
 - [compiler-explorer.nvim by krady21](https://github.com/krady21/compiler-explorer.nvim) (Lua)
+- [ForCompile](https://github.com/gha3mi/forcompile) - A Fortran library to access the API by
+  [gha3mi](https://github.com/gha3mi) (Fortran)

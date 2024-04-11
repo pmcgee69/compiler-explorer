@@ -22,6 +22,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import {beforeAll, describe, expect, it} from 'vitest';
+
 import {CompilationEnvironment} from '../lib/compilation-env.js';
 import {JavaCompiler} from '../lib/compilers/index.js';
 import * as utils from '../lib/utils.js';
@@ -40,67 +42,71 @@ const info = {
     lang: languages.java.id,
 } as unknown as CompilerInfo;
 
-describe('Basic compiler setup', function () {
+describe('Basic compiler setup', () => {
     let env: CompilationEnvironment;
 
-    before(() => {
+    beforeAll(() => {
         env = makeCompilationEnvironment({languages});
     });
 
-    it('Should not crash on instantiation', function () {
+    it('Should not crash on instantiation', () => {
         new JavaCompiler(info, env);
     });
 
-    it('should ignore second param for getOutputFilename', function () {
+    it('should ignore second param for getOutputFilename', () => {
         // Because javac produces a class files based on user provided class names,
         // it's not possible to determine the main class file before compilation/parsing
         const compiler = new JavaCompiler(info, env);
         if (process.platform === 'win32') {
-            compiler.getOutputFilename('/tmp/').should.equal('\\tmp\\example.class');
+            expect(compiler.getOutputFilename('/tmp/')).toEqual('\\tmp\\example.class');
         } else {
-            compiler.getOutputFilename('/tmp/').should.equal('/tmp/example.class');
+            expect(compiler.getOutputFilename('/tmp/')).toEqual('/tmp/example.class');
         }
     });
 
-    describe('Forbidden compiler arguments', function () {
+    describe('Forbidden compiler arguments', () => {
         it('JavaCompiler should not allow -d parameter', () => {
             const compiler = new JavaCompiler(info, env);
-            compiler
-                .filterUserOptions(['hello', '-d', '--something', '--something-else'])
-                .should.deep.equal(['hello', '--something-else']);
-            compiler.filterUserOptions(['hello', '-d']).should.deep.equal(['hello']);
-            compiler.filterUserOptions(['-d', 'something', 'something-else']).should.deep.equal(['something-else']);
+            expect(compiler.filterUserOptions(['hello', '-d', '--something', '--something-else'])).toEqual([
+                'hello',
+                '--something-else',
+            ]);
+            expect(compiler.filterUserOptions(['hello', '-d'])).toEqual(['hello']);
+            expect(compiler.filterUserOptions(['-d', 'something', 'something-else'])).toEqual(['something-else']);
         });
 
         it('JavaCompiler should not allow -s parameter', () => {
             const compiler = new JavaCompiler(info, env);
-            compiler
-                .filterUserOptions(['hello', '-s', '--something', '--something-else'])
-                .should.deep.equal(['hello', '--something-else']);
-            compiler.filterUserOptions(['hello', '-s']).should.deep.equal(['hello']);
-            compiler.filterUserOptions(['-s', 'something', 'something-else']).should.deep.equal(['something-else']);
+            expect(compiler.filterUserOptions(['hello', '-s', '--something', '--something-else'])).toEqual([
+                'hello',
+                '--something-else',
+            ]);
+            expect(compiler.filterUserOptions(['hello', '-s'])).toEqual(['hello']);
+            expect(compiler.filterUserOptions(['-s', 'something', 'something-else'])).toEqual(['something-else']);
         });
 
         it('JavaCompiler should not allow --source-path parameter', () => {
             const compiler = new JavaCompiler(info, env);
-            compiler
-                .filterUserOptions(['hello', '--source-path', '--something', '--something-else'])
-                .should.deep.equal(['hello', '--something-else']);
-            compiler.filterUserOptions(['hello', '--source-path']).should.deep.equal(['hello']);
-            compiler
-                .filterUserOptions(['--source-path', 'something', 'something-else'])
-                .should.deep.equal(['something-else']);
+            expect(compiler.filterUserOptions(['hello', '--source-path', '--something', '--something-else'])).toEqual([
+                'hello',
+                '--something-else',
+            ]);
+            expect(compiler.filterUserOptions(['hello', '--source-path'])).toEqual(['hello']);
+            expect(compiler.filterUserOptions(['--source-path', 'something', 'something-else'])).toEqual([
+                'something-else',
+            ]);
         });
 
         it('JavaCompiler should not allow -sourcepath parameter', () => {
             const compiler = new JavaCompiler(info, env);
-            compiler
-                .filterUserOptions(['hello', '-sourcepath', '--something', '--something-else'])
-                .should.deep.equal(['hello', '--something-else']);
-            compiler.filterUserOptions(['hello', '-sourcepath']).should.deep.equal(['hello']);
-            compiler
-                .filterUserOptions(['-sourcepath', 'something', 'something-else'])
-                .should.deep.equal(['something-else']);
+            expect(compiler.filterUserOptions(['hello', '-sourcepath', '--something', '--something-else'])).toEqual([
+                'hello',
+                '--something-else',
+            ]);
+            expect(compiler.filterUserOptions(['hello', '-sourcepath'])).toEqual(['hello']);
+            expect(compiler.filterUserOptions(['-sourcepath', 'something', 'something-else'])).toEqual([
+                'something-else',
+            ]);
         });
     });
 });
@@ -108,12 +114,12 @@ describe('Basic compiler setup', function () {
 describe('javap parsing', () => {
     let compiler: JavaCompiler;
     let env: CompilationEnvironment;
-    before(() => {
+    beforeAll(() => {
         env = makeCompilationEnvironment({languages});
         compiler = new JavaCompiler(info, env);
     });
 
-    function testJava(baseFolder: string, ...classNames: string[]) {
+    async function testJava(baseFolder: string, ...classNames: string[]) {
         const compiler = new JavaCompiler(info, env);
 
         const asm = classNames.map(className => {
@@ -142,18 +148,18 @@ describe('javap parsing', () => {
             asm,
         };
 
-        const processed = compiler.processAsm(result);
-        processed.should.have.property('asm');
+        const processed = await compiler.processAsm(result);
+        expect(processed).toHaveProperty('asm');
         const asmSegments = (processed as {asm: ParsedAsmResultLine[]}).asm;
-        asmSegments.should.deep.equal(expectedSegments);
+        expect(asmSegments).toEqual(expectedSegments);
     }
 
-    it('should handle errors', () => {
+    it('should handle errors', async () => {
         const result = {
             asm: '<Compilation failed>',
         };
 
-        compiler.processAsm(result).should.deep.equal([{text: '<Compilation failed>', source: null}]);
+        await expect(compiler.processAsm(result)).resolves.toEqual([{text: '<Compilation failed>', source: null}]);
     });
 
     it('Parses simple class with one method', () => {

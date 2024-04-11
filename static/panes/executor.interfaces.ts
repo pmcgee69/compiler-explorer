@@ -22,7 +22,9 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {WidgetState} from '../widgets/libs-widget.interfaces.js';
+import type {ConfiguredOverrides} from '../../types/compilation/compiler-overrides.interfaces.js';
+import type {ConfiguredRuntimeTools} from '../../types/execution/execution.interfaces.js';
+import type {WidgetState} from '../widgets/libs-widget.interfaces.js';
 
 export type ExecutorState = WidgetState & {
     tree?: number;
@@ -38,4 +40,6 @@ export type ExecutorState = WidgetState & {
     wrap?: boolean;
     lang?: string;
     compiler: string;
+    overrides?: ConfiguredOverrides;
+    runtimeTools?: ConfiguredRuntimeTools;
 };

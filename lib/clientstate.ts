@@ -24,13 +24,16 @@
 
 export class ClientStateCompilerOptions {
     binary = false;
+    binaryObject = false;
     commentOnly = true;
     demangle = true;
     directives = true;
     execute = false;
     intel = true;
     labels = true;
+    libraryCode = false;
     trim = false;
+    debugCalls = false;
 
     constructor(jsondata?) {
         if (jsondata) this.fromJsonData(jsondata);
@@ -38,13 +41,16 @@ export class ClientStateCompilerOptions {
 
     fromJsonData(jsondata) {
         if (jsondata.binary !== undefined) this.binary = jsondata.binary;
+        if (jsondata.binaryObject !== undefined) this.binaryObject = jsondata.binaryObject;
         if (jsondata.commentOnly !== undefined) this.commentOnly = jsondata.commentOnly;
         if (jsondata.demangle !== undefined) this.demangle = jsondata.demangle;
         if (jsondata.directives !== undefined) this.directives = jsondata.directives;
         if (jsondata.execute !== undefined) this.execute = jsondata.execute;
         if (jsondata.intel !== undefined) this.intel = jsondata.intel;
         if (jsondata.labels !== undefined) this.labels = jsondata.labels;
+        if (jsondata.libraryCode !== undefined) this.libraryCode = jsondata.libraryCode;
         if (jsondata.trim !== undefined) this.trim = jsondata.trim;
+        if (jsondata.debugCalls !== undefined) this.debugCalls = jsondata.debugCalls;
     }
 }
 

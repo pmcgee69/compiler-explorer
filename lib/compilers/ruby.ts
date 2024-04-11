@@ -44,11 +44,11 @@ export class RubyCompiler extends BaseCompiler {
             this.compilerProps('disasmScript') || resolvePathFromAppRoot('etc', 'scripts', 'disasms', 'disasm.rb');
     }
 
-    override getCompilerResultLanguageId() {
+    override getCompilerResultLanguageId(filters?: ParseFiltersAndOutputOptions): string | undefined {
         return 'asmruby';
     }
 
-    override processAsm(result) {
+    override async processAsm(result) {
         const lineRe = /\(\s*(\d+)\)(?:\[[^\]]+])?$/;
         const fileRe = /ISeq:.*?@(.*?):(\d+) /;
         const baseFile = path.basename(this.compileFilename);

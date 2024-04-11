@@ -38,13 +38,16 @@ export class ClientStateNormalizer {
 
     setFilterSettingsFromComponent(compiler, component) {
         compiler.filters.binary = component.componentState.filters.binary;
+        compiler.filters.binaryObject = component.componentState.filters.binaryObject;
         compiler.filters.execute = component.componentState.filters.execute;
         compiler.filters.labels = component.componentState.filters.labels;
+        compiler.filters.libraryCode = component.componentState.filters.libraryCode;
         compiler.filters.directives = component.componentState.filters.directives;
         compiler.filters.commentOnly = component.componentState.filters.commentOnly;
         compiler.filters.trim = component.componentState.filters.trim;
         compiler.filters.intel = component.componentState.filters.intel;
         compiler.filters.demangle = component.componentState.filters.demangle;
+        compiler.filters.debugCalls = component.componentState.filters.debugCalls;
     }
 
     findCompilerInGoldenLayout(content, id) {
@@ -186,6 +189,12 @@ export class ClientStateNormalizer {
             this.addSpecialOutputToCompiler(component.componentState.id, 'ast', component.componentState.editorid);
         } else if (component.componentName === 'opt') {
             this.addSpecialOutputToCompiler(component.componentState.id, 'opt', component.componentState.editorid);
+        } else if (component.componentName === 'stackusage') {
+            this.addSpecialOutputToCompiler(
+                component.componentState.id,
+                'stackusage',
+                component.componentState.editorid,
+            );
         } else if (component.componentName === 'cfg') {
             this.addSpecialOutputToCompiler(component.componentState.id, 'cfg', component.componentState.editorid);
         } else if (component.componentName === 'gccdump') {
@@ -312,6 +321,18 @@ class GoldenLayoutComponents {
         return {
             type: 'component',
             componentName: 'opt',
+            componentState: {
+                id: compilerIndex,
+                editorid: customSessionId || (session ? session.id : undefined),
+            },
+            isClosable: true,
+            reorderEnabled: true,
+        };
+    }
+    createStackUsageComponent(session, compilerIndex, customSessionId?) {
+        return {
+            type: 'component',
+            componentName: 'stackusage',
             componentState: {
                 id: compilerIndex,
                 editorid: customSessionId || (session ? session.id : undefined),
@@ -504,6 +525,8 @@ class GoldenLayoutComponents {
             return this.createAstComponent(session, idxCompiler + 1, customSessionId);
         } else if (viewtype === 'opt') {
             return this.createOptComponent(session, idxCompiler + 1, customSessionId);
+        } else if (viewtype === 'stackusage') {
+            return this.createStackUsageComponent(session, idxCompiler + 1, customSessionId);
         } else if (viewtype === 'cfg') {
             return this.createCfgComponent(session, idxCompiler + 1, customSessionId);
         } else if (viewtype === 'gccdump') {
@@ -517,6 +540,8 @@ class GoldenLayoutComponents {
         if (viewtype === 'ast') {
             return this.createAstComponent(null, idxCompiler + 1, false);
         } else if (viewtype === 'opt') {
+            return this.createOptComponent(null, idxCompiler + 1, false);
+        } else if (viewtype === 'stackusage') {
             return this.createOptComponent(null, idxCompiler + 1, false);
         } else if (viewtype === 'cfg') {
             return this.createCfgComponent(null, idxCompiler + 1, false);

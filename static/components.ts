@@ -84,6 +84,7 @@ import {
     TOOL_INPUT_VIEW_COMPONENT_NAME,
     DIFF_VIEW_COMPONENT_NAME,
     OPT_VIEW_COMPONENT_NAME,
+    STACK_USAGE_VIEW_COMPONENT_NAME,
     FLAGS_VIEW_COMPONENT_NAME,
     PP_VIEW_COMPONENT_NAME,
     AST_VIEW_COMPONENT_NAME,
@@ -100,10 +101,14 @@ import {
     RUST_MACRO_EXP_VIEW_COMPONENT_NAME,
     RUST_HIR_VIEW_COMPONENT_NAME,
     DEVICE_VIEW_COMPONENT_NAME,
-    LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME,
-    EmptyLLVMOptPipelineViewState,
-    PopulatedLLVMOptPipelineViewState,
+    OPT_PIPELINE_VIEW_COMPONENT_NAME,
+    EmptyOptPipelineViewState,
+    PopulatedOptPipelineViewState,
+    PopulatedStackUsageViewState,
+    EmptyStackUsageViewState,
 } from './components.interfaces.js';
+import {ConfiguredOverrides} from './compilation/compiler-overrides.interfaces.js';
+import {ConfiguredRuntimeTools} from './execution/execution.interfaces.js';
 
 /** Get an empty compiler component. */
 export function getCompiler(editorId: number, lang: string): ComponentConfig<EmptyCompilerState> {
@@ -181,6 +186,8 @@ export function getExecutorWith(
     libraries: unknown,
     compilerArgs,
     treeId: number,
+    overrides?: ConfiguredOverrides,
+    runtimeTools?: ConfiguredRuntimeTools,
 ): ComponentConfig<PopulatedExecutorState> {
     return {
         type: 'component',
@@ -194,6 +201,8 @@ export function getExecutorWith(
             lang,
             compilationPanelShown: true,
             compilerOutShown: true,
+            overrides: overrides,
+            runtimeTools: runtimeTools,
         },
     };
 }
@@ -217,7 +226,7 @@ export function getExecutorForTree(treeId: number, lang: string): ComponentConfi
  *
  * TODO: main.js calls this with no arguments.
  */
-export function getEditor(id?: number, langId?: string): ComponentConfig<EmptyEditorState> {
+export function getEditor(langId: string, id?: number): ComponentConfig<EmptyEditorState> {
     return {
         type: 'component',
         componentName: EDITOR_COMPONENT_NAME,
@@ -233,6 +242,7 @@ export function getEditorWith(
     id: number,
     source: string,
     options: ParseFiltersAndOutputOptions,
+    langId: string,
 ): ComponentConfig<PopulatedEditorState> {
     return {
         type: 'component',
@@ -241,6 +251,7 @@ export function getEditorWith(
             id,
             source,
             options,
+            lang: langId,
         },
     };
 }
@@ -382,6 +393,35 @@ export function getOptViewWith(
     };
 }
 
+export function getStackUsageView(): ComponentConfig<EmptyStackUsageViewState> {
+    return {
+        type: 'component',
+        componentName: STACK_USAGE_VIEW_COMPONENT_NAME,
+        componentState: {},
+    };
+}
+export function getStackUsageViewWith(
+    id: number,
+    source: string,
+    suOutput: unknown,
+    compilerName: string,
+    editorid: number,
+    treeid: number,
+): ComponentConfig<PopulatedStackUsageViewState> {
+    return {
+        type: 'component',
+        componentName: STACK_USAGE_VIEW_COMPONENT_NAME,
+        componentState: {
+            id,
+            source,
+            suOutput,
+            compilerName,
+            editorid,
+            treeid,
+        },
+    };
+}
+
 /** Get an empty flags view component. */
 export function getFlagsView(): ComponentConfig<EmptyFlagsViewState> {
     return {
@@ -515,16 +555,21 @@ export function getCfgView(): ComponentConfig<EmptyCfgViewState> {
 }
 
 /** Get a cfg view with the given configuration. */
-export function getCfgViewWith(id: number, editorid: number, treeid: number): ComponentConfig<PopulatedCfgViewState> {
+export function getCfgViewWith(
+    id: number,
+    editorid: number,
+    treeid: number,
+    isircfg?: boolean,
+): ComponentConfig<PopulatedCfgViewState> {
     return {
         type: 'component',
         componentName: CFG_VIEW_COMPONENT_NAME,
         componentState: {
             selectedFunction: null,
-            zoom: 1,
             id,
             editorid,
             treeid,
+            isircfg,
         },
     };
 }
@@ -580,31 +625,35 @@ export function getIrViewWith(
     };
 }
 
-/** Get an empty ir view component. */
-export function getLLVMOptPipelineView(): ComponentConfig<EmptyLLVMOptPipelineViewState> {
+/** Get an empty opt pipeline view component. */
+export function getOptPipelineView(): ComponentConfig<EmptyOptPipelineViewState> {
     return {
         type: 'component',
-        componentName: LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME,
+        componentName: OPT_PIPELINE_VIEW_COMPONENT_NAME,
         componentState: {},
     };
 }
 
-/** Get a ir view with the given configuration. */
-export function getLLVMOptPipelineViewWith(
+/** Get a opt pipeline view with the given configuration. */
+export function getOptPipelineViewWith(
     id: number,
+    lang: string,
+    compilerId: string,
     compilerName: string,
     editorid: number,
     treeid: number,
-): ComponentConfig<PopulatedLLVMOptPipelineViewState> {
+): ComponentConfig<PopulatedOptPipelineViewState> {
     return {
         type: 'component',
-        componentName: LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME,
+        componentName: OPT_PIPELINE_VIEW_COMPONENT_NAME,
         componentState: {
             id,
+            lang,
+            compiler: compilerId,
             compilerName,
             editorid,
             treeid,
-            selectedFunction: '',
+            selectedGroup: '',
             selectedIndex: 0,
             sidebarWidth: 0,
         },

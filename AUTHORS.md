@@ -7,7 +7,7 @@ Explorer are:
 - [Austin Morton](https://github.com/apmorton)
 - [Marc Poulhiès](https://poulhies.fr)
 - [Jeremy Rifkin](https://github.com/jeremy-rifkin)
-- [Mats Larsen](https://supergrecko.dev)
+- [Mats Larsen](https://www.jun.codes/)
 
 ---
 
@@ -15,7 +15,7 @@ Additionally, these people have been immensely helpful in the development of Com
 
 - [Jared Wyles](https://github.com/jaredwy)
 - [Chedy Najjar](https://github.com/CppChedy)
-- [Simon Brand](https://blog.tartanllama.xyz/)
+- [Sy Brand](https://blog.tartanllama.xyz/)
 - [Filipe Cabecinhas](https://github.com/filcab)
 
 Please also see our [Contributors](CONTRIBUTORS.md) for a full list.

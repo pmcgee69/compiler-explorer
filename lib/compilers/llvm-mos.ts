@@ -84,11 +84,20 @@ export class LLVMMOSCompiler extends ClangCompiler {
         if (this.compiler.exe.includes('nes')) {
             let nesFile = outputFilename;
             if (outputFilename.endsWith('.elf')) {
-                nesFile = outputFilename.substr(0, outputFilename.length - 4);
+                nesFile = outputFilename.substring(0, outputFilename.length - 4);
             }
 
             if (await utils.fileExists(nesFile)) {
                 await this.addArtifactToResult(res, nesFile, ArtifactType.nesrom);
+            }
+        } else if (this.compiler.exe.includes('c64')) {
+            let prgFile = outputFilename;
+            if (outputFilename.endsWith('.elf')) {
+                prgFile = outputFilename.substring(0, outputFilename.length - 4);
+            }
+
+            if (await utils.fileExists(prgFile)) {
+                await this.addArtifactToResult(res, prgFile, ArtifactType.c64prg);
             }
         }
 

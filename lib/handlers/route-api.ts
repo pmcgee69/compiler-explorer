@@ -22,30 +22,42 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import * as Sentry from '@sentry/node';
 import express from 'express';
 
 import {assert, unwrap} from '../assert.js';
 import {ClientState} from '../clientstate.js';
 import {ClientStateGoldenifier, ClientStateNormalizer} from '../clientstate-normalizer.js';
-import {isString} from '../common-utils.js';
+import {isString} from '../../shared/common-utils.js';
 import {logger} from '../logger.js';
 import {StorageBase} from '../storage/index.js';
 import * as utils from '../utils.js';
 
 import {ApiHandler} from './api.js';
+import {SentryCapture} from '../sentry.js';
+import {ExpandedShortLink} from '../storage/base.js';
+import {CompileHandler} from './compile.js';
+import {ClientOptionsHandler} from '../options-handler.js';
+import {PropertyGetter} from '../properties.interfaces.js';
+import {CompilerExplorerOptions, AppDefaultArguments} from '../../app.js';
 
 export type HandlerConfig = {
-    compileHandler: any;
-    clientOptionsHandler: any;
+    compileHandler: CompileHandler;
+    clientOptionsHandler: ClientOptionsHandler;
     storageHandler: StorageBase;
-    ceProps: any;
-    opts: any;
-    defArgs: any;
+    ceProps: PropertyGetter;
+    opts: CompilerExplorerOptions;
+    defArgs: AppDefaultArguments;
     renderConfig: any;
     renderGoldenLayout: any;
     staticHeaders: any;
     contentPolicyHeader: any;
+};
+
+type ShortLinkMetaData = {
+    ogDescription?: string;
+    ogAuthor?: string;
+    ogTitle?: string;
+    ogCreated?: Date;
 };
 
 export class RouteAPI {
@@ -53,7 +65,10 @@ export class RouteAPI {
     storageHandler: StorageBase;
     apiHandler: ApiHandler;
 
-    constructor(private readonly router: express.Router, config: HandlerConfig) {
+    constructor(
+        private readonly router: express.Router,
+        config: HandlerConfig,
+    ) {
         this.renderGoldenLayout = config.renderGoldenLayout;
 
         this.storageHandler = config.storageHandler;
@@ -110,7 +125,7 @@ export class RouteAPI {
             .catch(err => {
                 logger.debug(`Exception thrown when expanding ${id}: `, err);
                 logger.warn('Exception value:', err);
-                Sentry.captureException(err);
+                SentryCapture(err, 'storedCodeHandler');
                 next({
                     statusCode: 404,
                     message: `ID "${id}/${sessionid}" could not be found`,
@@ -201,7 +216,7 @@ export class RouteAPI {
             .catch(err => {
                 logger.warn(`Exception thrown when expanding ${id}`);
                 logger.warn('Exception value:', err);
-                Sentry.captureException(err);
+                SentryCapture(err, 'storedStateHandlerResetLayout');
                 next({
                     statusCode: 404,
                     message: `ID "${id}" could not be found`,
@@ -221,17 +236,19 @@ export class RouteAPI {
         return lines.map(line => this.escapeLine(req, line)).join('\n');
     }
 
-    getMetaDataFromLink(req: express.Request, link: {config: string; specialMetadata: any} | null, config) {
-        const metadata = {
-            ogDescription: null as string | null,
-            ogAuthor: null as string | null,
+    getMetaDataFromLink(req: express.Request, link: ExpandedShortLink | null, config) {
+        const metadata: ShortLinkMetaData = {
             ogTitle: 'Compiler Explorer',
         };
 
         if (link) {
-            metadata.ogDescription = link.specialMetadata ? link.specialMetadata.description.S : null;
-            metadata.ogAuthor = link.specialMetadata ? link.specialMetadata.author.S : null;
-            metadata.ogTitle = link.specialMetadata ? link.specialMetadata.title.S : 'Compiler Explorer';
+            if (link.specialMetadata) {
+                metadata.ogDescription = link.specialMetadata.description.S;
+                metadata.ogAuthor = link.specialMetadata.author.S;
+                metadata.ogTitle = link.specialMetadata.title.S;
+            }
+
+            if (link.created) metadata.ogCreated = link.created;
         }
 
         if (!metadata.ogDescription) {

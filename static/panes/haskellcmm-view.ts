@@ -34,6 +34,8 @@ import {HaskellCmmState} from './haskellcmm-view.interfaces.js';
 import {ga} from '../analytics.js';
 import {extendConfig} from '../monaco-config.js';
 import {Hub} from '../hub.js';
+import {CompilationResult} from '../compilation/compilation.interfaces.js';
+import {CompilerInfo} from '../compiler.interfaces.js';
 
 export class HaskellCmm extends MonacoPane<monaco.editor.IStandaloneCodeEditor, HaskellCmmState> {
     constructor(hub: Hub, container: Container, state: HaskellCmmState & MonacoPaneState) {
@@ -47,8 +49,8 @@ export class HaskellCmm extends MonacoPane<monaco.editor.IStandaloneCodeEditor, 
         return $('#haskellCmm').html();
     }
 
-    override createEditor(editorRoot: HTMLElement): monaco.editor.IStandaloneCodeEditor {
-        return monaco.editor.create(
+    override createEditor(editorRoot: HTMLElement): void {
+        this.editor = monaco.editor.create(
             editorRoot,
             extendConfig({
                 language: 'haskell',
@@ -57,6 +59,10 @@ export class HaskellCmm extends MonacoPane<monaco.editor.IStandaloneCodeEditor, 
                 lineNumbersMinChars: 3,
             }),
         );
+    }
+
+    override getPrintName() {
+        return 'GHC Cmm Output';
     }
 
     override registerOpeningAnalyticsEvent(): void {
@@ -78,7 +84,7 @@ export class HaskellCmm extends MonacoPane<monaco.editor.IStandaloneCodeEditor, 
         this.eventHub.emit('requestSettings');
     }
 
-    override onCompileResult(compilerId: number, compiler: any, result: any): void {
+    override onCompileResult(compilerId: number, compiler: CompilerInfo, result: CompilationResult): void {
         if (this.compilerInfo.compilerId !== compilerId) return;
         if (result.hasHaskellCmmOutput) {
             this.showHaskellCmmResults(result.haskellCmmOutput);
@@ -87,7 +93,13 @@ export class HaskellCmm extends MonacoPane<monaco.editor.IStandaloneCodeEditor, 
         }
     }
 
-    override onCompiler(compilerId: number, compiler: any, options: any, editorId?: number, treeId?: number): void {
+    override onCompiler(
+        compilerId: number,
+        compiler: CompilerInfo | null,
+        options: string,
+        editorId?: number,
+        treeId?: number,
+    ): void {
         if (this.compilerInfo.compilerId === compilerId) {
             this.compilerInfo.compilerName = compiler ? compiler.name : '';
             this.compilerInfo.editorId = editorId;

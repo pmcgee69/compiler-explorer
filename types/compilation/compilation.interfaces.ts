@@ -24,12 +24,116 @@
 
 import {BuildEnvDownloadInfo} from '../../lib/buildenvsetup/buildenv.interfaces.js';
 import {IAsmParser} from '../../lib/parsers/asm-parser.interfaces.js';
+import type {GccDumpViewSelectedPass} from '../../static/panes/gccdump-view.interfaces.js';
+import type {PPOptions} from '../../static/panes/pp-view.interfaces.js';
+import {suCodeEntry} from '../../static/panes/stack-usage-view.interfaces.js';
+import {ParsedAsmResultLine} from '../asmresult/asmresult.interfaces.js';
 import {CompilerInfo} from '../compiler.interfaces.js';
-import {BasicExecutionResult} from '../execution/execution.interfaces.js';
+import {BasicExecutionResult, ConfiguredRuntimeTools} from '../execution/execution.interfaces.js';
+import {ParseFiltersAndOutputOptions} from '../features/filters.interfaces.js';
 import {ResultLine} from '../resultline/resultline.interfaces.js';
 import {Artifact, ToolResult} from '../tool.interfaces.js';
 
-import {LLVMOptPipelineOutput} from './llvm-opt-pipeline-output.interfaces.js';
+import {CFGResult} from './cfg.interfaces.js';
+import {ConfiguredOverrides} from './compiler-overrides.interfaces.js';
+import {LLVMIrBackendOptions} from './ir.interfaces.js';
+import {OptPipelineBackendOptions, OptPipelineOutput} from './opt-pipeline-output.interfaces.js';
+
+export type ActiveTools = {
+    id: number;
+    args: string[];
+    stdin: string;
+};
+
+export type ExecutionParams = {
+    args?: string[] | string;
+    stdin?: string;
+    runtimeTools?: ConfiguredRuntimeTools;
+};
+
+export type CompileChildLibraries = {
+    id: string;
+    version: string;
+};
+
+export type GccDumpFlags = {
+    gimpleFe: boolean;
+    address: boolean;
+    slim: boolean;
+    raw: boolean;
+    details: boolean;
+    stats: boolean;
+    blocks: boolean;
+    vops: boolean;
+    lineno: boolean;
+    uid: boolean;
+    all: boolean;
+};
+
+export type CompilationRequestOptions = {
+    userArguments: string;
+    compilerOptions: {
+        executorRequest?: boolean;
+        skipAsm?: boolean;
+        producePp?: PPOptions | null;
+        produceAst?: boolean;
+        produceGccDump?: {
+            opened: boolean;
+            pass?: GccDumpViewSelectedPass;
+            treeDump?: boolean;
+            rtlDump?: boolean;
+            ipaDump?: boolean;
+            dumpFlags?: GccDumpFlags;
+        };
+        produceStackUsageInfo?: boolean;
+        produceOptInfo?: boolean;
+        produceCfg?: {asm: boolean; ir: boolean} | false;
+        produceGnatDebugTree?: boolean;
+        produceGnatDebug?: boolean;
+        produceIr?: LLVMIrBackendOptions | null;
+        produceOptPipeline?: OptPipelineBackendOptions | null;
+        produceDevice?: boolean;
+        produceRustMir?: boolean;
+        produceRustMacroExp?: boolean;
+        produceRustHir?: boolean;
+        produceHaskellCore?: boolean;
+        produceHaskellStg?: boolean;
+        produceHaskellCmm?: boolean;
+        cmakeArgs?: string;
+        customOutputFilename?: string;
+        overrides?: ConfiguredOverrides;
+    };
+    executeParameters: ExecutionParams;
+    filters: ParseFiltersAndOutputOptions;
+    tools: ActiveTools[];
+    libraries: CompileChildLibraries[];
+};
+
+// Carefully chosen for backwards compatibility
+// Compilation will imply exec (this is important for backward compatibility, though there is a world in which it could
+// be desirable to only bypass a compilation cache and not the execution pass)
+export enum BypassCache {
+    None = 0,
+    Compilation = 1,
+    Execution = 2,
+}
+
+export function bypassCompilationCache(value: BypassCache) {
+    return value === BypassCache.Compilation;
+}
+
+export function bypassExecutionCache(value: BypassCache) {
+    return value === BypassCache.Compilation || value === BypassCache.Execution;
+}
+
+export type CompilationRequest = {
+    source: string;
+    compiler: string;
+    options: CompilationRequestOptions;
+    lang: string | null;
+    files: FiledataPair[];
+    bypassCache?: BypassCache;
+};
 
 export type CompilationResult = {
     code: number;
@@ -42,6 +146,7 @@ export type CompilationResult = {
     devices?: Record<string, CompilationResult>;
     stdout: ResultLine[];
     stderr: ResultLine[];
+    truncated?: boolean;
     didExecute?: boolean;
     execResult?: {
         stdout?: ResultLine[];
@@ -70,14 +175,23 @@ export type CompilationResult = {
     optOutput?: any;
     optPath?: string;
 
+    hasStackUsageOutput?: boolean;
+    stackUsageOutput?: suCodeEntry[];
+    stackUsagePath?: string;
+
     hasAstOutput?: boolean;
     astOutput?: any;
 
     hasIrOutput?: boolean;
-    irOutput?: any;
+    irOutput?: {
+        asm: ParsedAsmResultLine[];
+        cfg?: CFGResult;
+    };
 
-    hasLLVMOptPipelineOutput?: boolean;
-    llvmOptPipelineOutput?: LLVMOptPipelineOutput | string;
+    hasOptPipelineOutput?: boolean;
+    optPipelineOutput?: OptPipelineOutput;
+
+    cfg?: CFGResult;
 
     hasRustMirOutput?: boolean;
     rustMirOutput?: any;
@@ -117,12 +231,13 @@ export type CompilationResult = {
 export type ExecutionOptions = {
     timeoutMs?: number;
     maxErrorOutput?: number;
-    env?: any;
+    env?: Record<string, string>;
     wrapper?: any;
     maxOutput?: number;
     ldPath?: string[];
     appHome?: string;
     customCwd?: string;
+    createAndUseTempDir?: boolean;
     // Stdin
     input?: any;
     killChild?: () => void;
@@ -142,7 +257,25 @@ export type BuildStep = BasicExecutionResult & {
     step: string;
 };
 
-export type CompilationInfo = {
+export type CompilationInfo = CompilationResult & {
+    mtime: Date | null;
+    compiler: CompilerInfo & Record<string, unknown>;
+    args: string[];
+    options: ExecutionOptions;
+    outputFilename: string;
+    executableFilename: string;
+    asmParser: IAsmParser;
+    inputFilename?: string;
+    dirPath?: string;
+};
+
+export type CustomInputForTool = {
+    inputFilename: string;
+    dirPath: string;
+    outputFilename: string;
+};
+
+export type CompilationInfo2 = CustomInputForTool & {
     mtime: Date | null;
     compiler: CompilerInfo & Record<string, unknown>;
     args: string[];
@@ -161,13 +294,26 @@ export type CompilationCacheKey = {
     options: ExecutionOptions;
 };
 
-export type CustomInputForTool = {
-    inputFilename: string;
-    dirPath: string;
-    outputFilename: string;
+export type CacheKey = {
+    compiler: any;
+    source: string;
+    options: string[];
+    backendOptions: any;
+    filters?: any;
+    tools: any[];
+    libraries: any[];
+    files: any[];
+};
+
+export type CmakeCacheKey = CacheKey & {
+    compiler: CompilerInfo;
+    files: [];
+    api: string;
 };
 
 export type FiledataPair = {
     filename: string;
     contents: string;
 };
+
+export type BufferOkFunc = (buffer: Buffer) => boolean;

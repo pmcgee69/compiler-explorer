@@ -1,0 +1,23 @@
+//  Snowball compiler (MIT)                         ／l、
+//    https://github.com/snowball-lang/snowball   （ﾟ､ ｡７
+//                                                ⠀ l、ﾞ~ヽ
+//  Vectors example for the lang                    じし(_,)ノ
+//  Docs: https://snowball-lang.gitbook.io/docs/
+
+// This example shows how to use vectors in Snowball.
+// Vectors are dynamic arrays that can be resized at runtime.
+// They are generic, so you can store any type of data in them.
+
+import std::io;
+
+public func main() i32 {
+    let mut vec = new Vector<i32>();
+
+    // To add an element to the vector, use the `push` method.
+    vec.push(42);
+
+    // To get the size of the vector, use the `size` method.
+    // To get an element from the vector, use the `[]` operator.
+    io::println(vec[0]);
+    io::println(vec.size());
+}

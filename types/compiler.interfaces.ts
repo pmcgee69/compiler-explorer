@@ -22,7 +22,11 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import {BypassCache} from './compilation/compilation.interfaces.js';
+import {AllCompilerOverrideOptions} from './compilation/compiler-overrides.interfaces.js';
 import {ICompilerArguments} from './compiler-arguments.interfaces.js';
+import {PossibleRuntimeTools} from './execution/execution.interfaces.js';
+import {InstructionSet} from './instructionsets.js';
 import {Language, LanguageKey} from './languages.interfaces.js';
 import {Library} from './libraries/libraries.interfaces.js';
 import {Tool, ToolInfo} from './tool.interfaces.js';
@@ -36,7 +40,7 @@ export type CompilerInfo = {
     baseName: string;
     alias: string[];
     options: string;
-    versionFlag?: string;
+    versionFlag: string[] | undefined;
     versionRe?: string;
     explicitVersion?: string;
     compilerType: string;
@@ -46,15 +50,18 @@ export type CompilerInfo = {
     debugPatched: boolean;
     demangler: string;
     demanglerType: string;
+    demanglerArgs: string[];
     objdumper: string;
     objdumperType: string;
+    objdumperArgs: string[];
     intelAsm: string;
     supportsAsmDocs: boolean;
-    instructionSet: string;
+    instructionSet: InstructionSet | null;
     needsMulti: boolean;
     adarts: string;
     supportsDeviceAsmView?: boolean;
     supportsDemangle?: boolean;
+    supportsVerboseDemangling?: boolean;
     supportsBinary?: boolean;
     supportsBinaryObject?: boolean;
     supportsIntel?: boolean;
@@ -64,10 +71,10 @@ export type CompilerInfo = {
     supportsGccDump?: boolean;
     supportsFiltersInBinary?: boolean;
     supportsOptOutput?: boolean;
+    supportsStackUsageOutput?: boolean;
     supportsPpView?: boolean;
     supportsAstView?: boolean;
     supportsIrView?: boolean;
-    supportsLLVMOptPipelineView?: boolean;
     supportsRustMirView?: boolean;
     supportsRustMacroExpView?: boolean;
     supportsRustHirView?: boolean;
@@ -77,7 +84,11 @@ export type CompilerInfo = {
     supportsCfg?: boolean;
     supportsGnatDebugViews?: boolean;
     supportsLibraryCodeFilter?: boolean;
+    supportsMarch?: boolean;
+    supportsTarget?: boolean;
+    supportsTargetIs?: boolean;
     executionWrapper: string;
+    executionWrapperArgs: string[];
     postProcess: string[];
     lang: LanguageKey;
     group: string;
@@ -89,16 +100,18 @@ export type CompilerInfo = {
     libpathFlag: string;
     libPath: string[];
     ldPath: string[];
+    extraPath: string[];
     // [env, setting][]
     envVars: [string, string][];
     notification: string;
     isSemVer: boolean;
     semver: string;
+    isNightly: boolean;
     libsArr: Library['id'][];
     tools: Record<ToolInfo['id'], Tool>;
     unwiseOptions: string[];
     hidden: boolean;
-    buildenvsetup: {
+    buildenvsetup?: {
         id: string;
         props: (name: string, def: string) => string;
     };
@@ -110,18 +123,30 @@ export type CompilerInfo = {
     remote?: {
         target: string;
         path: string;
+        cmakePath: string;
     };
+    possibleOverrides?: AllCompilerOverrideOptions;
+    possibleRuntimeTools?: PossibleRuntimeTools;
     disabledFilters: string[];
     optArg?: string;
+    stackUsageArg?: string;
     externalparser: any;
     removeEmptyGccDump?: boolean;
     irArg?: string[];
-    llvmOptArg?: string[];
-    llvmOptModuleScopeArg?: string[];
-    llvmOptNoDiscardValueNamesArg?: string[];
+    minIrArgs?: string[];
+    optPipeline?: {
+        groupName?: string;
+        supportedOptions?: string[];
+        supportedFilters?: string[];
+        arg?: string[];
+        moduleScopeArg?: string[];
+        noDiscardValueNamesArg?: string[];
+        monacoLanguage?: string;
+    };
     cachedPossibleArguments?: any;
     nvdisasm?: string;
     mtime?: any;
+    $order: number;
 };
 
 // Compiler information collected by the compiler-finder
@@ -132,8 +157,8 @@ export type PreliminaryCompilerInfo = Omit<CompilerInfo, 'version' | 'fullVersio
 export interface ICompiler {
     possibleArguments: ICompilerArguments;
     lang: Language;
-    compile(source, options, backendOptions, filters, bypassCache, tools, executionParameters, libraries, files);
-    cmake(files, key);
+    compile(source, options, backendOptions, filters, bypassCache, tools, executeParameters, libraries, files);
+    cmake(files, key, bypassCache: BypassCache);
     initialise(mtime: Date, clientOptions, isPrediscovered: boolean);
     getInfo(): CompilerInfo;
 }

@@ -38,24 +38,38 @@ import type {PropertyGetter, PropertyValue} from './properties.interfaces.js';
 import {Source} from './sources/index.js';
 import {BaseTool, getToolTypeByKey} from './tooling/index.js';
 import {asSafeVer, getHash, splitArguments, splitIntoArray} from './utils.js';
+import {AppDefaultArguments} from '../app.js';
+import {CompilerInfo} from '../types/compiler.interfaces.js';
 
-// TODO: There is surely a better name for this type. Used both here and in the compiler finder.
-export type OptionHandlerArguments = {
-    rootDir: string;
-    env: string[];
-    hostname: string[];
-    port: number;
-    gitReleaseName: string;
-    releaseBuildNumber: string;
-    wantedLanguages: string | null;
-    doCache: boolean;
-    fetchCompilersFromRemote: boolean;
-    ensureNoCompilerClash: boolean;
-    suppressConsoleLog: boolean;
+// TODO: Figure out if same as libraries.interfaces.ts?
+export type VersionInfo = {
+    version: string;
+    staticliblink: string[];
+    alias: string[];
+    dependencies: string[];
+    path: string[];
+    libpath: string[];
+    liblink: string[];
+    lookupversion?: PropertyValue;
+    options: string[];
+    hidden: boolean;
+    packagedheaders?: boolean;
+};
+export type OptionsHandlerLibrary = {
+    name: string;
+    url: string;
+    description: string;
+    staticliblink: string[];
+    liblink: string[];
+    dependencies: string[];
+    versions: Record<string, VersionInfo>;
+    examples: string[];
+    options: string[];
+    packagedheaders?: boolean;
 };
 
 // TODO: Is this the same as Options in static/options.interfaces.ts?
-type OptionsType = {
+export type ClientOptionsType = {
     googleAnalyticsAccount: string;
     googleAnalyticsEnabled: boolean;
     sharingEnabled: boolean;
@@ -65,8 +79,8 @@ type OptionsType = {
     googleShortLinkRewrite: string[];
     urlShortenService: string;
     defaultSource: string;
-    compilers: never[];
-    libs: Record<any, any>;
+    compilers: CompilerInfo[];
+    libs: Record<string, Record<string, OptionsHandlerLibrary>>;
     remoteLibs: Record<any, any>;
     tools: Record<any, any>;
     defaultLibs: Record<LanguageKey, string>;
@@ -92,6 +106,7 @@ type OptionsType = {
     doCache: boolean;
     thirdPartyIntegrationEnabled: boolean;
     statusTrackingEnabled: boolean;
+    compilerVersionsUrl?: string;
     policies: {
         cookies: {
             enabled: boolean;
@@ -119,7 +134,7 @@ export class ClientOptionsHandler {
     supportsLibraryCodeFilterPerLanguage: Record<LanguageKey, boolean>;
     supportsLibraryCodeFilter: boolean;
     remoteLibs: Record<any, any>;
-    options: OptionsType;
+    options: ClientOptionsType;
     optionsJSON: string;
     optionsHash: string;
     /***
@@ -130,7 +145,7 @@ export class ClientOptionsHandler {
      * @param {CompilerProps} compilerProps
      * @param {Object} defArgs - Compiler Explorer arguments
      */
-    constructor(fileSources: Source[], compilerProps: CompilerProps, defArgs: OptionHandlerArguments) {
+    constructor(fileSources: Source[], compilerProps: CompilerProps, defArgs: AppDefaultArguments) {
         this.compilerProps = compilerProps.get.bind(compilerProps);
         this.ceProps = compilerProps.ceProps;
         const ceProps = compilerProps.ceProps;
@@ -195,6 +210,7 @@ export class ClientOptionsHandler {
             defaultFontScale: ceProps('defaultFontScale', 14),
             doCache: defArgs.doCache,
             thirdPartyIntegrationEnabled: ceProps('thirdPartyIntegrationEnabled', true),
+            compilerVersionsUrl: ceProps<string | undefined>('compilerVersionsUrl', undefined),
             statusTrackingEnabled: ceProps('statusTrackingEnabled', true),
             policies: {
                 cookies: {
@@ -262,31 +278,8 @@ export class ClientOptionsHandler {
     }
 
     parseLibraries(baseLibs: Record<string, string>) {
-        type VersionInfo = {
-            version: string;
-            staticliblink: string[];
-            alias: string[];
-            dependencies: string[];
-            path: string[];
-            libpath: string[];
-            liblink: string[];
-            lookupversion?: PropertyValue;
-            options: string[];
-            hidden: boolean;
-        };
-        type Library = {
-            name: string;
-            url: string;
-            description: string;
-            staticliblink: string[];
-            liblink: string[];
-            dependencies: string[];
-            versions: Record<string, VersionInfo>;
-            examples: string[];
-            options: string[];
-        };
         // Record language -> {Record lib name -> lib}
-        const libraries: Record<string, Record<string, Library>> = {};
+        const libraries: Record<string, Record<string, OptionsHandlerLibrary>> = {};
         for (const [lang, forLang] of Object.entries(baseLibs)) {
             if (lang && forLang) {
                 libraries[lang] = {};
@@ -302,6 +295,7 @@ export class ClientOptionsHandler {
                         versions: {},
                         examples: splitIntoArray(this.compilerProps<string>(lang, libBaseName + '.examples')),
                         options: splitArguments(this.compilerProps(lang, libBaseName + '.options', '')),
+                        packagedheaders: this.compilerProps<boolean>(lang, libBaseName + '.packagedheaders', false),
                     };
                     const listedVersions = `${this.compilerProps(lang, libBaseName + '.versions')}`;
                     if (listedVersions) {
@@ -327,6 +321,7 @@ export class ClientOptionsHandler {
                                 // Library options might get overridden later
                                 options: libraries[lang][lib].options,
                                 hidden: this.compilerProps(lang, libVersionName + '.hidden', false),
+                                packagedheaders: libraries[lang][lib].packagedheaders,
                             };
 
                             const lookupversion = this.compilerProps(lang, libVersionName + '.lookupversion');
@@ -337,7 +332,7 @@ export class ClientOptionsHandler {
                             const includes = this.compilerProps<string>(lang, libVersionName + '.path');
                             if (includes) {
                                 versionObject.path = includes.split(path.delimiter);
-                            } else {
+                            } else if (version !== 'autodetect') {
                                 logger.warn(`Library ${lib} ${version} (${lang}) has no include paths`);
                             }
 
@@ -351,6 +346,12 @@ export class ClientOptionsHandler {
                                 versionObject.options = splitArguments(options);
                             }
 
+                            versionObject.packagedheaders = this.compilerProps<boolean>(
+                                lang,
+                                libVersionName + '.packagedheaders',
+                                libraries[lang][lib].packagedheaders,
+                            );
+
                             libraries[lang][lib].versions[version] = versionObject;
                         }
                     } else {
@@ -362,11 +363,7 @@ export class ClientOptionsHandler {
         for (const langGroup of Object.values(libraries)) {
             for (const libGroup of Object.values(langGroup)) {
                 const versions = Object.values(libGroup.versions);
-                // TODO: A and B don't contain any property called semver here. It's probably leftover from old code
-                // and should be removed in the future.
-                versions.sort((a, b) =>
-                    semverParser.compare(asSafeVer((a as any).semver), asSafeVer((b as any).semver), true),
-                );
+                versions.sort((a, b) => semverParser.compare(asSafeVer(a.version), asSafeVer(b.version), true));
                 let order = 0;
                 // Set $order to index on array. As group is an array, iteration order is guaranteed.
                 for (const lib of versions) {
@@ -430,7 +427,7 @@ export class ClientOptionsHandler {
         await this.getRemoteLibraries(language, remote.target);
     }
 
-    async setCompilers(compilers: any[]) {
+    async setCompilers(compilers: CompilerInfo[]) {
         const forbiddenKeys = new Set([
             'exe',
             'versionFlag',
@@ -442,7 +439,7 @@ export class ClientOptionsHandler {
             'demanglerType',
             'isSemVer',
         ]);
-        const copiedCompilers = JSON.parse(JSON.stringify(compilers));
+        const copiedCompilers = JSON.parse(JSON.stringify(compilers)) as CompilerInfo[];
         const semverGroups: Record<string, any> = {};
         // Reset the supportsExecute flag in case critical compilers change
 

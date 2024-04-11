@@ -54,8 +54,8 @@ export class PtxAssembler extends BaseCompiler {
                 line = line.split(inputFilename).join('<source>');
 
                 if (inputFilename.indexOf('./') === 0) {
-                    line = line.split('/home/ubuntu/' + inputFilename.substr(2)).join('<source>');
-                    line = line.split('/home/ce/' + inputFilename.substr(2)).join('<source>');
+                    line = line.split('/home/ubuntu/' + inputFilename.substring(2)).join('<source>');
+                    line = line.split('/home/ce/' + inputFilename.substring(2)).join('<source>');
                 }
             }
             if (line !== null) {
@@ -93,7 +93,7 @@ export class PtxAssembler extends BaseCompiler {
         compiler: string,
         options: string[],
         inputFilename: string,
-        execOptions: ExecutionOptions,
+        execOptions: ExecutionOptions & {env: Record<string, string>},
     ) {
         if (!execOptions) {
             execOptions = this.getDefaultExecOptions();
@@ -121,7 +121,7 @@ export class PtxAssembler extends BaseCompiler {
 
     override async objdump(outputFilename, result: any, maxSize: number) {
         const dirPath = path.dirname(outputFilename);
-        const args = ['-c', '-g', '-hex', outputFilename];
+        const args = [...this.compiler.objdumperArgs, '-c', '-g', '-hex', outputFilename];
         const objResult = await this.exec(this.compiler.objdumper, args, {maxOutput: maxSize, customCwd: dirPath});
         result.asm = objResult.stdout;
         if (objResult.code === 0) {

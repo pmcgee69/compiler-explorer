@@ -31,7 +31,7 @@ import {unwrap} from '../assert.js';
 import {BaseCompiler} from '../base-compiler.js';
 import * as utils from '../utils.js';
 
-import {ClangParser} from './argument-parsers.js';
+import {GolangParser} from './argument-parsers.js';
 
 // Each arch has a list of jump instructions in
 // Go source src/cmd/asm/internal/arch.
@@ -60,16 +60,28 @@ export class GolangCompiler extends BaseCompiler {
 
     constructor(compilerInfo: PreliminaryCompilerInfo, env) {
         super(compilerInfo, env);
-        const goroot = this.compilerProps<string | undefined>(`compiler.${this.compiler.id}.goroot`);
-        const goarch = this.compilerProps<string | undefined>(`compiler.${this.compiler.id}.goarch`);
-        const goos = this.compilerProps<string | undefined>(`compiler.${this.compiler.id}.goos`);
+        const group = this.compiler.group;
+
+        const goroot = this.compilerProps<string | undefined>(
+            'goroot',
+            this.compilerProps<string | undefined>(`group.${group}.goroot`),
+        );
+        // GOARCH can be something like '386' which is read out as a number.
+        const goarch = this.compilerProps<string | number | undefined>(
+            'goarch',
+            this.compilerProps<string | undefined>(`group.${group}.goarch`),
+        );
+        const goos = this.compilerProps<string | undefined>(
+            'goos',
+            this.compilerProps<string | undefined>(`group.${group}.goos`),
+        );
 
         this.GOENV = {};
         if (goroot) {
             this.GOENV.GOROOT = goroot;
         }
         if (goarch) {
-            this.GOENV.GOARCH = goarch;
+            this.GOENV.GOARCH = goarch.toString();
         }
         if (goos) {
             this.GOENV.GOOS = goos;
@@ -215,7 +227,7 @@ export class GolangCompiler extends BaseCompiler {
         result.asm = this.convertNewGoL(out);
         result.stderr = [];
         result.stdout = utils.parseOutput(logging, result.inputFilename);
-        return Promise.all([result, '']);
+        return Promise.all([result, '', '']);
     }
 
     override getSharedLibraryPathsAsArguments() {
@@ -245,13 +257,19 @@ export class GolangCompiler extends BaseCompiler {
     }
 
     override getDefaultExecOptions() {
-        return {
+        const options = {
             ...super.getDefaultExecOptions(),
+        };
+
+        options.env = {
+            ...options.env,
             ...this.GOENV,
         };
+
+        return options;
     }
 
-    override getArgumentParser() {
-        return ClangParser;
+    override getArgumentParser(): any {
+        return GolangParser;
     }
 }

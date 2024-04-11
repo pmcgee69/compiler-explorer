@@ -36,6 +36,7 @@ import {OutputState} from './output.interfaces.js';
 import {FontScale} from '../widgets/fontscale.js';
 import {CompilationResult} from '../../types/compilation/compilation.interfaces.js';
 import {CompilerInfo} from '../../types/compiler.interfaces.js';
+import {escapeHTML} from '../../shared/common-utils.js';
 
 function makeAnsiToHtml(color?) {
     return new AnsiToHtml.Filter({
@@ -75,8 +76,9 @@ export class Output extends Pane<OutputState> {
         this.fontScale = new FontScale(this.domRoot, state, '.content');
         this.fontScale.on('change', this.updateState.bind(this));
         this.normalAnsiToHtml = makeAnsiToHtml();
-        this.errorAnsiToHtml = makeAnsiToHtml('red');
+        this.errorAnsiToHtml = makeAnsiToHtml('var(--terminal-red)');
         this.eventHub.emit('outputOpened', this.compilerInfo.compilerId);
+        this.eventHub.on('printrequest', this.sendPrintData, this);
         this.onOptionsChange();
     }
 
@@ -169,10 +171,11 @@ export class Output extends Pane<OutputState> {
     }
 
     addOutputLines(result: CompilationResult) {
-        const stdout = result.stdout;
+        // When MS upgrade to a server version later than Nov 11, 2022 (the merge of PR #4278)
+        // the `undefined` check can be removed.
+        const stdout = (result.stdout as any) !== undefined ? result.stdout : [];
         const stderr = result.stderr;
         for (const obj of stdout.concat(stderr)) {
-            // @ts-ignore Line not part of ResultLine. Unclear if type bug or code bug
             const lineNumber = obj.tag ? obj.tag.line : obj.line;
             const columnNumber = obj.tag ? obj.tag.column : -1;
             if (obj.text === '') {
@@ -225,7 +228,7 @@ export class Output extends Pane<OutputState> {
                     if (obj.text === '') {
                         this.programOutput('<br/>');
                     } else {
-                        this.programOutput(this.errorAnsiToHtml.toHtml(obj.text), 'red');
+                        this.programOutput(this.errorAnsiToHtml.toHtml(obj.text), 'var(--terminal-red)');
                     }
                 }
 
@@ -243,7 +246,13 @@ export class Output extends Pane<OutputState> {
         this.updateTitle();
     }
 
-    override onCompiler(compilerId: number, compiler: unknown, options: unknown, editorId: number, treeId: number) {}
+    override onCompiler(
+        compilerId: number,
+        compiler: CompilerInfo | null,
+        options: string,
+        editorId: number,
+        treeId: number,
+    ) {}
 
     programOutput(msg: string, color?: string) {
         const elem = $('<div/>').appendTo(this.contentRoot).html(msg).addClass('program-exec-output');
@@ -326,5 +335,13 @@ export class Output extends Pane<OutputState> {
 
     private onSelectAllButton(unused: JQuery.ClickEvent) {
         this.selectAll();
+    }
+
+    protected sendPrintData() {
+        this.eventHub.emit(
+            'printdata',
+            // eslint-disable-next-line no-useless-concat
+            `<h1>Output Pane: ${escapeHTML(this.getPaneName())}</h1>` + `<code>${this.contentRoot.html()}</code>`,
+        );
     }
 }

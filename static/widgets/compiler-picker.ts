@@ -26,14 +26,13 @@ import $ from 'jquery';
 import TomSelect from 'tom-select';
 
 import {ga} from '../analytics.js';
-import * as local from '../local.js';
 import {EventHub} from '../event-hub.js';
 import {Hub} from '../hub.js';
 import {CompilerService} from '../compiler-service.js';
 import {CompilerInfo} from '../../types/compiler.interfaces.js';
-import {unique} from '../../lib/common-utils.js';
 import {unwrap} from '../assert.js';
 import {CompilerPickerPopup} from './compiler-picker-popup.js';
+import {localStorage} from '../local.js';
 
 type Favourites = {
     [compilerId: string]: boolean;
@@ -123,7 +122,7 @@ export class CompilerPicker {
                 // Typing here needs improvement later anyway.
                 /* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition */
                 if (val) {
-                    const compilerId = val as any as string;
+                    const compilerId = val as string;
                     ga.proxy('send', {
                         hitType: 'event',
                         eventCategory: 'SelectCompiler',
@@ -177,6 +176,9 @@ export class CompilerPicker {
 
         this.tomSelect.on('dropdown_close', () => {
             this.popupTooltip.remove();
+            // scroll back to the selection on the next open
+            const selection = unwrap(this.tomSelect).getOption(this.lastCompilerId);
+            unwrap(this.tomSelect).setActiveOption(selection);
         });
 
         $(this.tomSelect.dropdown_content).on('click', '.toggle-fav', evt => {
@@ -251,11 +253,11 @@ export class CompilerPicker {
     }
 
     getFavorites(): Favourites {
-        return JSON.parse(local.get(CompilerPicker.favoriteStoreKey, '{}'));
+        return JSON.parse(localStorage.get(CompilerPicker.favoriteStoreKey, '{}'));
     }
 
     setFavorites(faves: Favourites) {
-        local.set(CompilerPicker.favoriteStoreKey, JSON.stringify(faves));
+        localStorage.set(CompilerPicker.favoriteStoreKey, JSON.stringify(faves));
     }
 
     isAFavorite(compilerId: string) {
