@@ -1,16 +1,10 @@
-unit output;
-
-interface
-
-function Square(const num: Integer): Integer;
-
-implementation
-
-// Type your code here, or load an example.
+program test;
 
 function Square(const num: Integer): Integer;
 begin
     Square := num * num;
 end;
 
+begin
+  writeln('Helllooo.');
 end.
