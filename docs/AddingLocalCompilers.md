@@ -72,3 +72,4 @@ defaultCompiler=bcc123_64mod
 
 - [AddingACompiler.md](AddingACompiler.md) - Full documentation
 - [Configuration.md](Configuration.md) - Configuration system details
+- [DelphiCppBuilderSpecifics.md](DelphiCppBuilderSpecifics.md) - Delphi and C++Builder setup guide
