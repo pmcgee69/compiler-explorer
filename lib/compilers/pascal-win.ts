@@ -48,6 +48,7 @@ export class PascalWinCompiler extends BaseCompiler {
 
     mapFilename: string | null;
     dprFilename: string;
+    projectBaseName: string;
 
     constructor(info: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(info, env);
@@ -56,6 +57,7 @@ export class PascalWinCompiler extends BaseCompiler {
         this.mapFilename = null;
         this.compileFilename = 'output.pas';
         this.dprFilename = 'prog.dpr';
+        this.projectBaseName = 'prog';
     }
 
     override getSharedLibraryPathsAsArguments() {
@@ -77,11 +79,11 @@ export class PascalWinCompiler extends BaseCompiler {
     }
 
     override getExecutableFilename(dirPath: string) {
-        return path.join(dirPath, 'prog.exe');
+        return path.join(dirPath, this.projectBaseName + '.exe');
     }
 
     override getOutputFilename(dirPath: string) {
-        return path.join(dirPath, 'prog.exe');
+        return path.join(dirPath, this.projectBaseName + '.exe');
     }
 
     override filename(fn: string) {
@@ -100,7 +102,7 @@ export class PascalWinCompiler extends BaseCompiler {
             outputFilename = this.getOutputFilename(path.dirname(outputFilename));
         }
 
-        let args = [...this.compiler.objdumperArgs, '-d', outputFilename];
+        let args = [...this.compiler.objdumperArgs, '-d', '-l', outputFilename];
         if (intelAsm) args = args.concat(['-M', 'intel']);
         return this.exec(this.compiler.objdumper, args, {maxOutput: 1024 * 1024 * 1024}).then(objResult => {
             if (objResult.code === 0) {
@@ -127,7 +129,9 @@ export class PascalWinCompiler extends BaseCompiler {
     override async writeAllFiles(dirPath: string, source: string, files: FiledataPair[]) {
         let inputFilename: string;
         if (pascalUtils.isProgram(source)) {
-            inputFilename = path.join(dirPath, this.dprFilename);
+            // Use the program name from the source, like FPC does
+            const progName = pascalUtils.getProgName(source);
+            inputFilename = path.join(dirPath, progName + '.dpr');
         } else {
             const unitName = pascalUtils.getUnitname(source);
             if (unitName) {
@@ -158,24 +162,34 @@ export class PascalWinCompiler extends BaseCompiler {
             execOptions = this.getDefaultExecOptions();
         }
 
-        const alreadyHasDPR = path.basename(inputFilename) === this.dprFilename;
-
         const tempPath = path.dirname(inputFilename);
-        const projectFile = path.join(tempPath, this.dprFilename);
+        const inputBasename = path.basename(inputFilename);
+        const isDprFile = inputBasename.toLowerCase().endsWith('.dpr');
 
-        this.mapFilename = path.join(tempPath, 'prog.map');
+        let projectFile: string;
+        let projectBaseName: string;
 
-        inputFilename = inputFilename.replaceAll('/', '\\');
-
-        if (!alreadyHasDPR) {
-            const unitFilepath = path.basename(inputFilename);
-            const unitName = unitFilepath.replace(/.pas$/i, '');
+        if (isDprFile) {
+            // Input is already a .dpr program file, compile it directly (like FPC does)
+            projectFile = inputFilename;
+            projectBaseName = inputBasename.replace(/\.dpr$/i, '');
+        } else {
+            // Input is a .pas unit file, create a dummy prog.dpr project that uses it
+            const unitFilepath = inputBasename;
+            const unitName = unitFilepath.replace(/\.pas$/i, '');
+            projectFile = path.join(tempPath, this.dprFilename);
+            projectBaseName = 'prog';
             await this.saveDummyProjectFile(projectFile, unitName, unitFilepath);
         }
 
+        this.projectBaseName = projectBaseName;
+        this.mapFilename = path.join(tempPath, projectBaseName + '.map');
+
+        inputFilename = inputFilename.replaceAll('/', '\\');
+
         options.pop();
 
-        options.unshift('-CC', '-W', '-H', '-GD', '-$D+', '-V', '-B');
+        options.unshift('-CC', '-W', '-H', '-GD', '-$D+', '-$L+', '-$O-', '-$W+', '-$C-', '-V', '-B');
 
         options.push(projectFile);
         execOptions.customCwd = tempPath;
@@ -198,7 +212,70 @@ export class PascalWinCompiler extends BaseCompiler {
             const reconstructor = new PELabelReconstructor(asmLines, false, mapFileReader, false);
             reconstructor.run('output');
 
-            return reconstructor.asmLines;
+            console.log(`[Delphi] Map file: ${this.mapFilename}`);
+            console.log(`[Delphi] Working directory: ${path.dirname(unwrap(this.mapFilename))}`);
+
+            // Convert source line markers from /app/filename:line format to .loc directives
+            const fileMap = new Map<string, number>();
+            let fileCounter = 1;
+            const result: string[] = [];
+            let foundSourceLines = 0;
+            let topLevelFileAdded = false;
+
+            for (const line of reconstructor.asmLines) {
+                const sourceMatch = line.match(/^\/app\/(.+):(\d+)$/);
+                if (sourceMatch) {
+                    foundSourceLines++;
+                    const filename = sourceMatch[1];
+                    const lineNumber = sourceMatch[2];
+
+                    // Skip line 0 markers - they indicate no line info available
+                    // Let the previous source line continue instead of breaking highlighting
+                    if (lineNumber === '0') {
+                        continue;
+                    }
+
+                    // Log first few matches for debugging
+                    if (foundSourceLines <= 5) {
+                        console.log(`[Delphi] Source marker ${foundSourceLines}: file="${filename}" line=${lineNumber}`);
+                    }
+
+                    // Add top-level .file directive once at the very beginning (like FPC does)
+                    if (!topLevelFileAdded) {
+                        const topLevelFile = `\t.file "${filename}"`;
+                        result.unshift(topLevelFile);
+                        console.log(`[Delphi] Added top-level .file directive: ${topLevelFile}`);
+                        topLevelFileAdded = true;
+                    }
+
+                    // Get or assign file number for DWARF debug info
+                    if (!fileMap.has(filename)) {
+                        const fileNum = fileCounter++;
+                        fileMap.set(filename, fileNum);
+                        const fileDirective = `\t.file ${fileNum} "${filename}"`;
+                        result.push(fileDirective);
+                        console.log(`[Delphi] Added numbered .file directive: ${fileDirective}`);
+                    }
+
+                    const fileNum = fileMap.get(filename)!;
+                    const locDirective = `\t.loc ${fileNum} ${lineNumber} 0`;
+                    result.push(locDirective);
+
+                    // Log first few .loc directives
+                    if (foundSourceLines <= 10) {
+                        console.log(`[Delphi] .loc directive: ${locDirective}`);
+                    }
+                } else {
+                    result.push(line);
+                }
+            }
+
+            console.log(`[Delphi] Processed ${reconstructor.asmLines.length} lines, found ${foundSourceLines} source markers, converted to .loc directives`);
+            console.log(`[Delphi] First 20 lines of processed assembly:`);
+            for (let i = 0; i < Math.min(20, result.length); i++) {
+                console.log(`[Delphi]   ${i}: ${result[i]}`);
+            }
+            return result;
         };
 
         return [];

@@ -625,6 +625,13 @@ export class AsmParser extends AsmRegex implements IAsmParser {
 
         if (filters.preProcessBinaryAsmLines) asmLines = filters.preProcessBinaryAsmLines(asmLines);
 
+        // Parse .file directives to build file number -> filename mapping
+        const files = this.parseFiles(asmLines);
+        const sourceContext: SourceHandlerContext = {
+            files: files,
+            dontMaskFilenames: dontMaskFilenames || false,
+        };
+
         for (const line of asmLines) {
             const labelsInLine: AsmResultLabel[] = [];
 
@@ -651,6 +658,16 @@ export class AsmParser extends AsmRegex implements IAsmParser {
                     source = {file: null, line: Number.parseInt(match.groups.line, 10), mainsource: true};
                 }
                 continue;
+            }
+
+            // Handle .file and .loc directives (DWARF debug info)
+            const sourceResult = this.sourceLineHandler.processSourceLine(line, sourceContext);
+            if (sourceResult.source !== undefined) {
+                source = sourceResult.source;
+                if (source && asm.length < 5) {
+                    console.log(`[AsmParser] Parsed source directive: file="${source.file}" line=${source.line} mainsource=${source.mainsource}`);
+                }
+                continue; // Don't display the directive itself
             }
 
             match = line.match(this.labelRe);
@@ -706,13 +723,17 @@ export class AsmParser extends AsmRegex implements IAsmParser {
                         },
                     });
                 }
-                asm.push({
+                const asmLine = {
                     opcodes: opcodes,
                     address: address,
                     text: disassembly,
                     source: source,
                     labels: labelsInLine,
-                });
+                };
+                if (asm.length < 10 && source) {
+                    console.log(`[AsmParser] Line ${asm.length}: "${disassembly.trim()}" -> source file="${source.file}" line=${source.line}`);
+                }
+                asm.push(asmLine);
             }
 
             match = line.match(this.relocationRe);

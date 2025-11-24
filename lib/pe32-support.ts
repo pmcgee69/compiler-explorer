@@ -275,7 +275,17 @@ export class PELabelReconstructor {
                     }
                 }
 
+                // Debug: log first 10 address lookups
+                if (lineIdx < 10) {
+                    console.log(`[PELabel] Looking up address ${address.toString(16)} (dec: ${address}), addressStr=${addressStr}`);
+                }
+
                 const lineInfo = this.mapFileReader.getLineInfoByAddress(undefined, address);
+
+                if (lineIdx < 10) {
+                    console.log(`[PELabel] Result: lineInfo=${lineInfo ? lineInfo.lineNumber : 'null'}, currentSegment=${currentSegment ? currentSegment.unitName : 'null'}, segmentChanged=${segmentChanged}`);
+                }
+
                 if (lineInfo && currentSegment && currentSegment.unitName) {
                     this.asmLines.splice(lineIdx, 0, '/app/' + currentSegment.unitName + ':' + lineInfo.lineNumber);
                     lineIdx++;
