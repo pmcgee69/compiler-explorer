@@ -105,17 +105,13 @@ export class MapFileReaderDelphi extends MapFileReader {
             // Extract module name from current unitName (remove .pas or .dpr extension)
             const moduleName = segment.unitName?.replace(/\.(pas|dpr)$/i, '') || '';
             if (this.moduleToFilename.has(moduleName)) {
-                const correctFilename = this.moduleToFilename.get(moduleName)!;
-                console.log(`[MapFileDelphi] Fixing segment unitName: "${segment.unitName}" -> "${correctFilename}"`);
-                segment.unitName = correctFilename;
+                segment.unitName = this.moduleToFilename.get(moduleName)!;
             }
         }
         for (const segment of this.isegments) {
             const moduleName = segment.unitName?.replace(/\.(pas|dpr)$/i, '') || '';
             if (this.moduleToFilename.has(moduleName)) {
-                const correctFilename = this.moduleToFilename.get(moduleName)!;
-                console.log(`[MapFileDelphi] Fixing isegment unitName: "${segment.unitName}" -> "${correctFilename}"`);
-                segment.unitName = correctFilename;
+                segment.unitName = this.moduleToFilename.get(moduleName)!;
             }
         }
     }
@@ -129,7 +125,6 @@ export class MapFileReaderDelphi extends MapFileReader {
             const filename = fullPath.split('\\').pop() || fullPath.split('/').pop() || fullPath;
             this.currentLineNumbersFilename = filename;
             this.moduleToFilename.set(moduleName, filename);
-            console.log(`[MapFileDelphi] Found line numbers section for module "${moduleName}" -> file: ${filename}`);
         }
         return !!matches;
     }
@@ -144,17 +139,10 @@ export class MapFileReaderDelphi extends MapFileReader {
         for (const reference of references) {
             const matches = reference.match(this.regexDelphiLineNumber);
             if (matches) {
-                const lineNumObj = {
+                this.lineNumbers.push({
                     ...this.addressToObject(matches[2], matches[3]),
                     lineNumber: Number.parseInt(matches[1], 10),
-                };
-                this.lineNumbers.push(lineNumObj);
-
-                // Debug: log first few line numbers
-                if (this.lineNumbers.length <= 5) {
-                    console.log(`[MapFileDelphi] Line ${lineNumObj.lineNumber} at address ${lineNumObj.addressInt.toString(16)} (segment ${lineNumObj.segment}:${matches[3]})`);
-                }
-
+                });
                 hasLineNumbers = true;
             }
         }

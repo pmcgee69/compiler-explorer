@@ -664,9 +664,6 @@ export class AsmParser extends AsmRegex implements IAsmParser {
             const sourceResult = this.sourceLineHandler.processSourceLine(line, sourceContext);
             if (sourceResult.source !== undefined) {
                 source = sourceResult.source;
-                if (source && asm.length < 5) {
-                    console.log(`[AsmParser] Parsed source directive: file="${source.file}" line=${source.line} mainsource=${source.mainsource}`);
-                }
                 continue; // Don't display the directive itself
             }
 
@@ -723,17 +720,13 @@ export class AsmParser extends AsmRegex implements IAsmParser {
                         },
                     });
                 }
-                const asmLine = {
+                asm.push({
                     opcodes: opcodes,
                     address: address,
                     text: disassembly,
                     source: source,
                     labels: labelsInLine,
-                };
-                if (asm.length < 10 && source) {
-                    console.log(`[AsmParser] Line ${asm.length}: "${disassembly.trim()}" -> source file="${source.file}" line=${source.line}`);
-                }
-                asm.push(asmLine);
+                });
             }
 
             match = line.match(this.relocationRe);

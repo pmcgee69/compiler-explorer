@@ -212,20 +212,15 @@ export class PascalWinCompiler extends BaseCompiler {
             const reconstructor = new PELabelReconstructor(asmLines, false, mapFileReader, false);
             reconstructor.run('output');
 
-            console.log(`[Delphi] Map file: ${this.mapFilename}`);
-            console.log(`[Delphi] Working directory: ${path.dirname(unwrap(this.mapFilename))}`);
-
             // Convert source line markers from /app/filename:line format to .loc directives
             const fileMap = new Map<string, number>();
             let fileCounter = 1;
             const result: string[] = [];
-            let foundSourceLines = 0;
             let topLevelFileAdded = false;
 
             for (const line of reconstructor.asmLines) {
                 const sourceMatch = line.match(/^\/app\/(.+):(\d+)$/);
                 if (sourceMatch) {
-                    foundSourceLines++;
                     const filename = sourceMatch[1];
                     const lineNumber = sourceMatch[2];
 
@@ -235,16 +230,9 @@ export class PascalWinCompiler extends BaseCompiler {
                         continue;
                     }
 
-                    // Log first few matches for debugging
-                    if (foundSourceLines <= 5) {
-                        console.log(`[Delphi] Source marker ${foundSourceLines}: file="${filename}" line=${lineNumber}`);
-                    }
-
                     // Add top-level .file directive once at the very beginning (like FPC does)
                     if (!topLevelFileAdded) {
-                        const topLevelFile = `\t.file "${filename}"`;
-                        result.unshift(topLevelFile);
-                        console.log(`[Delphi] Added top-level .file directive: ${topLevelFile}`);
+                        result.unshift(`\t.file "${filename}"`);
                         topLevelFileAdded = true;
                     }
 
@@ -252,29 +240,16 @@ export class PascalWinCompiler extends BaseCompiler {
                     if (!fileMap.has(filename)) {
                         const fileNum = fileCounter++;
                         fileMap.set(filename, fileNum);
-                        const fileDirective = `\t.file ${fileNum} "${filename}"`;
-                        result.push(fileDirective);
-                        console.log(`[Delphi] Added numbered .file directive: ${fileDirective}`);
+                        result.push(`\t.file ${fileNum} "${filename}"`);
                     }
 
                     const fileNum = fileMap.get(filename)!;
-                    const locDirective = `\t.loc ${fileNum} ${lineNumber} 0`;
-                    result.push(locDirective);
-
-                    // Log first few .loc directives
-                    if (foundSourceLines <= 10) {
-                        console.log(`[Delphi] .loc directive: ${locDirective}`);
-                    }
+                    result.push(`\t.loc ${fileNum} ${lineNumber} 0`);
                 } else {
                     result.push(line);
                 }
             }
 
-            console.log(`[Delphi] Processed ${reconstructor.asmLines.length} lines, found ${foundSourceLines} source markers, converted to .loc directives`);
-            console.log(`[Delphi] First 20 lines of processed assembly:`);
-            for (let i = 0; i < Math.min(20, result.length); i++) {
-                console.log(`[Delphi]   ${i}: ${result[i]}`);
-            }
             return result;
         };
 
