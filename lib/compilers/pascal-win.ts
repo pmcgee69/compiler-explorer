@@ -36,7 +36,7 @@ import {unwrap} from '../assert.js';
 import {BaseCompiler} from '../base-compiler.js';
 import {CompilationEnvironment} from '../compilation-env.js';
 import {MapFileReaderDelphi} from '../mapfiles/map-file-delphi.js';
-import {PELabelReconstructor} from '../pe32-support.js';
+import {PELabelReconstructor, PELabelReconstructorOptions} from '../pe32-support.js';
 import * as utils from '../utils.js';
 
 import * as pascalUtils from './pascal-utils.js';
@@ -107,6 +107,16 @@ export class PascalWinCompiler extends BaseCompiler {
         return this.exec(this.compiler.objdumper, args, {maxOutput: 1024 * 1024 * 1024}).then(objResult => {
             if (objResult.code === 0) {
                 result.asm = objResult.stdout;
+                const lines = objResult.stdout.split('\n');
+                console.log(`[Delphi] Objdump output: ${lines.length} lines`);
+                console.log(`[Delphi] First 5 lines with addresses:`);
+                let addressLineCount = 0;
+                for (let i = 0; i < Math.min(50, lines.length); i++) {
+                    if (lines[i].match(/^\s*[0-9a-f]+:/)) {
+                        console.log(`[Delphi]   Line ${i}: ${lines[i]}`);
+                        if (++addressLineCount >= 5) break;
+                    }
+                }
             } else {
                 result.asm = '<No output: objdump returned ' + objResult.code + '>';
             }
@@ -208,8 +218,13 @@ export class PascalWinCompiler extends BaseCompiler {
         filters.binary = true;
         filters.dontMaskFilenames = true;
         filters.preProcessBinaryAsmLines = (asmLines: string[]) => {
+            console.log(`[Delphi] Map filename: ${this.mapFilename}`);
             const mapFileReader = new MapFileReaderDelphi(unwrap(this.mapFilename));
-            const reconstructor = new PELabelReconstructor(asmLines, false, mapFileReader, false);
+            const reconstructor = new PELabelReconstructor(
+                asmLines,
+                mapFileReader,
+                new Set([PELabelReconstructorOptions.DeleteBeforeFirstSegment]),
+            );
             reconstructor.run('output');
 
             // Convert source line markers from /app/filename:line format to .loc directives
@@ -218,6 +233,7 @@ export class PascalWinCompiler extends BaseCompiler {
             const result: string[] = [];
             let topLevelFileAdded = false;
 
+            let sourceMarkerCount = 0;
             for (const line of reconstructor.asmLines) {
                 const sourceMatch = line.match(/^\/app\/(.+):(\d+)$/);
                 if (sourceMatch) {
@@ -228,6 +244,11 @@ export class PascalWinCompiler extends BaseCompiler {
                     // Let the previous source line continue instead of breaking highlighting
                     if (lineNumber === '0') {
                         continue;
+                    }
+
+                    sourceMarkerCount++;
+                    if (sourceMarkerCount <= 3) {
+                        console.log(`[Delphi] Source marker ${sourceMarkerCount}: file="${filename}" line=${lineNumber}`);
                     }
 
                     // Add top-level .file directive once at the very beginning (like FPC does)
@@ -250,6 +271,7 @@ export class PascalWinCompiler extends BaseCompiler {
                 }
             }
 
+            console.log(`[Delphi] Total source markers found: ${sourceMarkerCount}`);
             return result;
         };
 

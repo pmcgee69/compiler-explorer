@@ -24,6 +24,15 @@
 
 import {MapFileReader, Segment} from './mapfiles/map-file.js';
 
+export enum PELabelReconstructorOptions {
+    /** Reconstruct segment information from the map file */
+    NeedsReconstruction,
+    /** Don't label addresses that aren't in the map file */
+    DontLabelUnmappedAddresses,
+    /** Delete all assembly before the first user code segment */
+    DeleteBeforeFirstSegment,
+}
+
 export class PELabelReconstructor {
     public readonly asmLines: string[];
     private readonly addressesToLabel: string[];
@@ -35,15 +44,16 @@ export class PELabelReconstructor {
     private readonly callRegex: RegExp;
     private readonly int3Regex: RegExp;
 
+    private readonly deleteBeforeFirstSegment: boolean;
+
     constructor(
         asmLines: string[],
-        dontLabelUnmappedAddresses: boolean,
         mapFileReader: MapFileReader,
-        needsReconstruction = true,
+        options: Set<PELabelReconstructorOptions> = new Set(),
     ) {
         this.asmLines = asmLines;
         this.addressesToLabel = [];
-        this.dontLabelUnmappedAddresses = dontLabelUnmappedAddresses;
+        this.dontLabelUnmappedAddresses = options.has(PELabelReconstructorOptions.DontLabelUnmappedAddresses);
 
         this.addressRegex = /^\s*([\da-f]*):/i;
         this.jumpRegex = /(\sj[a-z]*)(\s*)0x([\da-f]*)/i;
@@ -51,7 +61,8 @@ export class PELabelReconstructor {
         this.int3Regex = /\tcc\s*\tint3\s*$/i;
 
         this.mapFileReader = mapFileReader;
-        this.needsReconstruction = needsReconstruction;
+        this.needsReconstruction = options.has(PELabelReconstructorOptions.NeedsReconstruction);
+        this.deleteBeforeFirstSegment = options.has(PELabelReconstructorOptions.DeleteBeforeFirstSegment);
     }
 
     /**
@@ -62,6 +73,9 @@ export class PELabelReconstructor {
         this.mapFileReader.run();
 
         //this.deleteEverythingBut(unitName);
+        if (this.deleteBeforeFirstSegment) {
+            this.deleteBeforeUserCode();
+        }
         this.deleteSystemUnits();
         this.shortenInt3s();
 
@@ -154,6 +168,39 @@ export class PELabelReconstructor {
             if (info.unitName && systemUnits.has(info.unitName)) {
                 this.deleteLinesBetweenAddresses(info.addressInt, info.addressInt + info.segmentLength);
             }
+        }
+    }
+
+    deleteBeforeUserCode() {
+        // Find the first user code segment (not system units)
+        const systemUnits = new Set(['SysInit.pas', 'System.pas', 'SysUtils.pas', 'Classes.pas']);
+        let firstUserAddress: number | undefined;
+
+        // For x86, prioritize isegments (actual code) over regular segments (may be data)
+        // Check isegments first
+        for (const info of this.mapFileReader.isegments) {
+            if (info.unitName && !systemUnits.has(info.unitName)) {
+                if (firstUserAddress === undefined || info.addressInt < firstUserAddress) {
+                    firstUserAddress = info.addressInt;
+                }
+            }
+        }
+
+        // Only check regular segments if no user isegments found
+        if (firstUserAddress === undefined) {
+            for (const info of this.mapFileReader.segments) {
+                if (info.unitName && !systemUnits.has(info.unitName)) {
+                    if (firstUserAddress === undefined || info.addressInt < firstUserAddress) {
+                        firstUserAddress = info.addressInt;
+                    }
+                }
+            }
+        }
+
+        // Delete everything before the first user code
+        if (firstUserAddress !== undefined) {
+            console.log(`[PELabel] Deleting from 0 to 0x${firstUserAddress.toString(16)}`);
+            this.deleteLinesBetweenAddresses(0, firstUserAddress);
         }
     }
 
@@ -276,6 +323,11 @@ export class PELabelReconstructor {
                 }
 
                 const lineInfo = this.mapFileReader.getLineInfoByAddress(undefined, address);
+
+                if (lineIdx < 3) {
+                    console.log(`[PELabel] Address ${address.toString(16)}: lineInfo=${lineInfo ? lineInfo.lineNumber : 'null'}, segment=${currentSegment ? currentSegment.unitName : 'null'}`);
+                }
+
                 if (lineInfo && currentSegment && currentSegment.unitName) {
                     this.asmLines.splice(lineIdx, 0, '/app/' + currentSegment.unitName + ':' + lineInfo.lineNumber);
                     lineIdx++;

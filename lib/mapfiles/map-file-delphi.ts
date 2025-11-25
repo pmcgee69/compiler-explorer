@@ -93,8 +93,12 @@ export class MapFileReaderDelphi extends MapFileReader {
     }
 
     override run() {
+        console.log(`[MapFileDelphi] Starting map file read: ${this.mapFilename}`);
+
         // First pass: read the map file
         super.run();
+
+        console.log(`[MapFileDelphi] Map file read complete. Line numbers found: ${this.lineNumbers.length}`);
 
         // Second pass: fix unitName for segments using the module-to-filename mapping
         this.fixSegmentUnitNames();
@@ -116,8 +120,32 @@ export class MapFileReaderDelphi extends MapFileReader {
         }
     }
 
+    override getSegmentInfoByStartingAddress(segment: string | undefined, address: number) {
+        // Check regular segments first
+        let result = super.getSegmentInfoByStartingAddress(segment, address);
+        if (result) return result;
+
+        // Also check isegments (for x86 .itext segments)
+        for (let idx = 0; idx < this.isegments.length; idx++) {
+            const info = this.isegments[idx];
+            if (!segment && info.addressInt === address) {
+                return info;
+            }
+            if (info.segment === segment && info.addressWithoutOffset === address) {
+                return info;
+            }
+        }
+
+        return undefined;
+    }
+
     override isStartOfLineNumbers(line: string) {
-        const matches = line.match(this.regexDelphiLineNumbersStart);
+        // Check both .text and .itext segments
+        let matches = line.match(this.regexDelphiLineNumbersStart);
+        if (!matches) {
+            matches = line.match(this.regexDelphiLineNumbersStartIText);
+        }
+
         if (matches) {
             // Extract module name and actual filename from the path in parentheses
             const moduleName = matches[1];
@@ -125,6 +153,7 @@ export class MapFileReaderDelphi extends MapFileReader {
             const filename = fullPath.split('\\').pop() || fullPath.split('/').pop() || fullPath;
             this.currentLineNumbersFilename = filename;
             this.moduleToFilename.set(moduleName, filename);
+            console.log(`[MapFileDelphi] Found line numbers for module "${moduleName}" -> file: ${filename}`);
         }
         return !!matches;
     }
@@ -139,10 +168,16 @@ export class MapFileReaderDelphi extends MapFileReader {
         for (const reference of references) {
             const matches = reference.match(this.regexDelphiLineNumber);
             if (matches) {
-                this.lineNumbers.push({
+                const lineNumObj = {
                     ...this.addressToObject(matches[2], matches[3]),
                     lineNumber: Number.parseInt(matches[1], 10),
-                });
+                };
+                this.lineNumbers.push(lineNumObj);
+
+                if (this.lineNumbers.length <= 3) {
+                    console.log(`[MapFileDelphi] Line ${lineNumObj.lineNumber} at address ${lineNumObj.addressInt.toString(16)} (segment ${lineNumObj.segment}:${matches[3]})`);
+                }
+
                 hasLineNumbers = true;
             }
         }
