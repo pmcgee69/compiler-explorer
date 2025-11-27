@@ -104,6 +104,8 @@ export class PascalWinCompiler extends BaseCompiler {
 
         let args = [...this.compiler.objdumperArgs, '-d', '-l', outputFilename];
         if (intelAsm) args = args.concat(['-M', 'intel']);
+        console.log(`[Delphi] Running objdump on: ${outputFilename}`);
+        console.log(`[Delphi] Objdump command: ${this.compiler.objdumper} ${args.join(' ')}`);
         return this.exec(this.compiler.objdumper, args, {maxOutput: 1024 * 1024 * 1024}).then(objResult => {
             if (objResult.code === 0) {
                 result.asm = objResult.stdout;
@@ -118,6 +120,9 @@ export class PascalWinCompiler extends BaseCompiler {
                     }
                 }
             } else {
+                console.log(`[Delphi] Objdump failed with code ${objResult.code}`);
+                console.log(`[Delphi] Objdump stderr: ${objResult.stderr}`);
+                console.log(`[Delphi] Objdump stdout: ${objResult.stdout}`);
                 result.asm = '<No output: objdump returned ' + objResult.code + '>';
             }
 

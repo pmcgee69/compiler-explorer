@@ -22,14 +22,24 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+function stripComments(source: string): string {
+    // Remove // comments (single line)
+    let result = source.replace(/\/\/.*$/gm, '');
+    // Remove { } comments (block)
+    result = result.replace(/\{[^}]*\}/g, '');
+    // Remove (* *) comments (block)
+    result = result.replace(/\(\*[\s\S]*?\*\)/g, '');
+    return result;
+}
+
 export function isProgram(source: string) {
     const re = /\s?program\s+([\w.-]*);/i;
-    return !!re.test(source);
+    return !!re.test(stripComments(source));
 }
 
 export function isUnit(source: string) {
     const re = /\s?unit\s+([\w.-]*);/i;
-    return !!re.test(source);
+    return !!re.test(stripComments(source));
 }
 
 export function getUnitname(source: string) {
