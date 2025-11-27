@@ -177,24 +177,15 @@ export class PELabelReconstructor {
     deleteBeforeUserCode() {
         // Find the first user code segment (not system units)
         const systemUnits = new Set(['SysInit.pas', 'System.pas', 'SysUtils.pas', 'Classes.pas']);
-        let firstUserAddress: number | undefined;
 
-        // Check both regular segments and isegments, take the minimum address
-        for (const info of this.mapFileReader.segments) {
-            if (info.unitName && !systemUnits.has(info.unitName)) {
-                if (firstUserAddress === undefined || info.addressInt < firstUserAddress) {
-                    firstUserAddress = info.addressInt;
-                }
-            }
-        }
+        // Combine both segment arrays and filter out system units
+        const allSegments = [...this.mapFileReader.segments, ...this.mapFileReader.isegments];
+        const userSegments = allSegments.filter(info => info.unitName && !systemUnits.has(info.unitName));
 
-        for (const info of this.mapFileReader.isegments) {
-            if (info.unitName && !systemUnits.has(info.unitName)) {
-                if (firstUserAddress === undefined || info.addressInt < firstUserAddress) {
-                    firstUserAddress = info.addressInt;
-                }
-            }
-        }
+        // Find the minimum address
+        const firstUserAddress = userSegments.length > 0
+            ? Math.min(...userSegments.map(info => info.addressInt))
+            : undefined;
 
         // Delete everything before the first user code
         if (firstUserAddress !== undefined) {
