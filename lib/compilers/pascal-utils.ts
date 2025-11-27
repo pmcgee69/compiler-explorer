@@ -22,14 +22,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-function stripCommentsForDetection(source: string): string {
-    // For detection only - remove comments entirely
-    let result = source.replace(/\/\/.*$/gm, '');
-    result = result.replace(/\{[^}]*\}/g, '');
-    result = result.replace(/\(\*[\s\S]*?\*\)/g, '');
-    return result;
-}
-
 export function stripComments(source: string): string {
     // Blank out comment content but preserve line numbers
     // For // comments: keep the // but blank the rest of the line
@@ -51,12 +43,12 @@ export function stripComments(source: string): string {
 
 export function isProgram(source: string) {
     const re = /\s?program\s+([\w.-]*);/i;
-    return !!re.test(stripCommentsForDetection(source));
+    return !!re.test(stripComments(source));
 }
 
 export function isUnit(source: string) {
     const re = /\s?unit\s+([\w.-]*);/i;
-    return !!re.test(stripCommentsForDetection(source));
+    return !!re.test(stripComments(source));
 }
 
 export function getUnitname(source: string) {
