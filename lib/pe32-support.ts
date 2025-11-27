@@ -198,7 +198,6 @@ export class PELabelReconstructor {
 
         // Delete everything before the first user code
         if (firstUserAddress !== undefined) {
-            console.log(`[PELabel] Deleting from 0 to 0x${firstUserAddress.toString(16)}`);
             this.deleteLinesBetweenAddresses(0, firstUserAddress);
         }
     }
@@ -322,10 +321,6 @@ export class PELabelReconstructor {
                 }
 
                 const lineInfo = this.mapFileReader.getLineInfoByAddress(undefined, address);
-
-                if (lineIdx < 3) {
-                    console.log(`[PELabel] Address ${address.toString(16)}: lineInfo=${lineInfo ? `${lineInfo.lineNumber} (${(lineInfo as any).filename || 'no filename'})` : 'null'}, segment=${currentSegment ? currentSegment.unitName : 'null'}`);
-                }
 
                 if (lineInfo && currentSegment && currentSegment.unitName) {
                     // Use filename from lineInfo if available (for Delphi), otherwise fall back to segment unitName

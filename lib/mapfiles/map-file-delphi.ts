@@ -93,12 +93,8 @@ export class MapFileReaderDelphi extends MapFileReader {
     }
 
     override run() {
-        console.log(`[MapFileDelphi] Starting map file read: ${this.mapFilename}`);
-
         // First pass: read the map file
         super.run();
-
-        console.log(`[MapFileDelphi] Map file read complete. Line numbers found: ${this.lineNumbers.length}`);
 
         // Second pass: fix unitName for segments using the module-to-filename mapping
         this.fixSegmentUnitNames();
@@ -153,7 +149,6 @@ export class MapFileReaderDelphi extends MapFileReader {
             const filename = fullPath.split('\\').pop() || fullPath.split('/').pop() || fullPath;
             this.currentLineNumbersFilename = filename;
             this.moduleToFilename.set(moduleName, filename);
-            console.log(`[MapFileDelphi] Found line numbers for module "${moduleName}" -> file: ${filename}`);
         }
         return !!matches;
     }
@@ -174,10 +169,6 @@ export class MapFileReaderDelphi extends MapFileReader {
                     filename: this.currentLineNumbersFilename,
                 };
                 this.lineNumbers.push(lineNumObj);
-
-                if (this.lineNumbers.length <= 3) {
-                    console.log(`[MapFileDelphi] Line ${lineNumObj.lineNumber} at address ${lineNumObj.addressInt.toString(16)} (segment ${lineNumObj.segment}:${matches[3]})`);
-                }
 
                 hasLineNumbers = true;
             }

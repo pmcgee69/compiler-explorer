@@ -664,9 +664,6 @@ export class AsmParser extends AsmRegex implements IAsmParser {
             const sourceResult = this.sourceLineHandler.processSourceLine(line, sourceContext);
             if (sourceResult.source !== undefined) {
                 source = sourceResult.source;
-                if (source && asm.length < 3) {
-                    console.log(`[AsmParser] Parsed directive: file="${source.file}" line=${source.line} mainsource=${source.mainsource}`);
-                }
                 continue; // Don't display the directive itself
             }
 

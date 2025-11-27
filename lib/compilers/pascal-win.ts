@@ -106,25 +106,10 @@ export class PascalWinCompiler extends BaseCompiler {
 
         let args = [...this.compiler.objdumperArgs, '-d', '-l', outputFilename];
         if (intelAsm) args = args.concat(['-M', 'intel']);
-        console.log(`[Delphi] Running objdump on: ${outputFilename}`);
-        console.log(`[Delphi] Objdump command: ${this.compiler.objdumper} ${args.join(' ')}`);
         return this.exec(this.compiler.objdumper, args, {maxOutput: 1024 * 1024 * 1024}).then(objResult => {
             if (objResult.code === 0) {
                 result.asm = objResult.stdout;
-                const lines = objResult.stdout.split('\n');
-                console.log(`[Delphi] Objdump output: ${lines.length} lines`);
-                console.log(`[Delphi] First 5 lines with addresses:`);
-                let addressLineCount = 0;
-                for (let i = 0; i < Math.min(50, lines.length); i++) {
-                    if (lines[i].match(/^\s*[0-9a-f]+:/)) {
-                        console.log(`[Delphi]   Line ${i}: ${lines[i]}`);
-                        if (++addressLineCount >= 5) break;
-                    }
-                }
             } else {
-                console.log(`[Delphi] Objdump failed with code ${objResult.code}`);
-                console.log(`[Delphi] Objdump stderr: ${objResult.stderr}`);
-                console.log(`[Delphi] Objdump stdout: ${objResult.stdout}`);
                 result.asm = '<No output: objdump returned ' + objResult.code + '>';
             }
 
@@ -230,7 +215,6 @@ export class PascalWinCompiler extends BaseCompiler {
         filters.binary = true;
         filters.dontMaskFilenames = true;
         filters.preProcessBinaryAsmLines = (asmLines: string[]) => {
-            console.log(`[Delphi] Map filename: ${this.mapFilename}`);
             const mapFileReader = new MapFileReaderDelphi(unwrap(this.mapFilename));
             // If this is a wrapper program (unit case), exclude prog.dpr segments
             const excludedUnits = this.isWrapperProgram ? ['prog.dpr'] : [];
@@ -249,7 +233,6 @@ export class PascalWinCompiler extends BaseCompiler {
             let topLevelFileAdded = false;
             let firstFilename: string | null = null;
 
-            let sourceMarkerCount = 0;
             for (const line of reconstructor.asmLines) {
                 const sourceMatch = line.match(/^\/app\/(.+):(\d+)$/);
                 if (sourceMatch) {
@@ -272,11 +255,6 @@ export class PascalWinCompiler extends BaseCompiler {
                         continue;
                     }
 
-                    sourceMarkerCount++;
-                    if (sourceMarkerCount <= 10) {
-                        console.log(`[Delphi] Source marker ${sourceMarkerCount}: file="${filename}" line=${lineNumber}`);
-                    }
-
                     // Add top-level .file directive once at the very beginning (like FPC does)
                     if (!topLevelFileAdded) {
                         result.unshift(`\t.file "${filename}"`);
@@ -296,8 +274,6 @@ export class PascalWinCompiler extends BaseCompiler {
                     result.push(line);
                 }
             }
-
-            console.log(`[Delphi] Total source markers found: ${sourceMarkerCount}`);
 
             // Truncate unmapped sections to max 5 lines
             return this.truncateUnmappedSections(result);
