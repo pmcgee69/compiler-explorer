@@ -45,11 +45,13 @@ export class PELabelReconstructor {
     private readonly int3Regex: RegExp;
 
     private readonly deleteBeforeFirstSegment: boolean;
+    private readonly additionalExcludedUnits: string[];
 
     constructor(
         asmLines: string[],
         mapFileReader: MapFileReader,
         options: Set<PELabelReconstructorOptions> = new Set(),
+        additionalExcludedUnits: string[] = [],
     ) {
         this.asmLines = asmLines;
         this.addressesToLabel = [];
@@ -63,6 +65,7 @@ export class PELabelReconstructor {
         this.mapFileReader = mapFileReader;
         this.needsReconstruction = options.has(PELabelReconstructorOptions.NeedsReconstruction);
         this.deleteBeforeFirstSegment = options.has(PELabelReconstructorOptions.DeleteBeforeFirstSegment);
+        this.additionalExcludedUnits = additionalExcludedUnits;
     }
 
     /**
@@ -152,7 +155,7 @@ export class PELabelReconstructor {
     }
 
     deleteSystemUnits() {
-        const systemUnits = new Set(['SysInit.pas', 'System.pas', 'SysUtils.pas', 'Classes.pas']);
+        const systemUnits = new Set(['SysInit.pas', 'System.pas', 'SysUtils.pas', 'Classes.pas', ...this.additionalExcludedUnits]);
 
         let idx;
         let info;
@@ -176,9 +179,8 @@ export class PELabelReconstructor {
         const systemUnits = new Set(['SysInit.pas', 'System.pas', 'SysUtils.pas', 'Classes.pas']);
         let firstUserAddress: number | undefined;
 
-        // For x86, prioritize isegments (actual code) over regular segments (may be data)
-        // Check isegments first
-        for (const info of this.mapFileReader.isegments) {
+        // Check both regular segments and isegments, take the minimum address
+        for (const info of this.mapFileReader.segments) {
             if (info.unitName && !systemUnits.has(info.unitName)) {
                 if (firstUserAddress === undefined || info.addressInt < firstUserAddress) {
                     firstUserAddress = info.addressInt;
@@ -186,13 +188,10 @@ export class PELabelReconstructor {
             }
         }
 
-        // Only check regular segments if no user isegments found
-        if (firstUserAddress === undefined) {
-            for (const info of this.mapFileReader.segments) {
-                if (info.unitName && !systemUnits.has(info.unitName)) {
-                    if (firstUserAddress === undefined || info.addressInt < firstUserAddress) {
-                        firstUserAddress = info.addressInt;
-                    }
+        for (const info of this.mapFileReader.isegments) {
+            if (info.unitName && !systemUnits.has(info.unitName)) {
+                if (firstUserAddress === undefined || info.addressInt < firstUserAddress) {
+                    firstUserAddress = info.addressInt;
                 }
             }
         }
@@ -325,11 +324,13 @@ export class PELabelReconstructor {
                 const lineInfo = this.mapFileReader.getLineInfoByAddress(undefined, address);
 
                 if (lineIdx < 3) {
-                    console.log(`[PELabel] Address ${address.toString(16)}: lineInfo=${lineInfo ? lineInfo.lineNumber : 'null'}, segment=${currentSegment ? currentSegment.unitName : 'null'}`);
+                    console.log(`[PELabel] Address ${address.toString(16)}: lineInfo=${lineInfo ? `${lineInfo.lineNumber} (${(lineInfo as any).filename || 'no filename'})` : 'null'}, segment=${currentSegment ? currentSegment.unitName : 'null'}`);
                 }
 
                 if (lineInfo && currentSegment && currentSegment.unitName) {
-                    this.asmLines.splice(lineIdx, 0, '/app/' + currentSegment.unitName + ':' + lineInfo.lineNumber);
+                    // Use filename from lineInfo if available (for Delphi), otherwise fall back to segment unitName
+                    const sourceFile = (lineInfo as any).filename || currentSegment.unitName;
+                    this.asmLines.splice(lineIdx, 0, '/app/' + sourceFile + ':' + lineInfo.lineNumber);
                     lineIdx++;
                 } else if (segmentChanged && currentSegment) {
                     this.asmLines.splice(lineIdx, 0, '/app/' + currentSegment.unitName + ':0');

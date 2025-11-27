@@ -22,24 +22,41 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-function stripComments(source: string): string {
-    // Remove // comments (single line)
+function stripCommentsForDetection(source: string): string {
+    // For detection only - remove comments entirely
     let result = source.replace(/\/\/.*$/gm, '');
-    // Remove { } comments (block)
     result = result.replace(/\{[^}]*\}/g, '');
-    // Remove (* *) comments (block)
     result = result.replace(/\(\*[\s\S]*?\*\)/g, '');
+    return result;
+}
+
+export function stripComments(source: string): string {
+    // Blank out comment content but preserve line numbers
+    // For // comments: keep the // but blank the rest of the line
+    let result = source.replace(/\/\/.*$/gm, '//');
+    // For { } comments: keep delimiters, blank content
+    result = result.replace(/\{[^}]*\}/g, match => '{}');
+    // For (* *) comments: keep delimiters, preserve newlines in content
+    result = result.replace(/\(\*[\s\S]*?\*\)/g, match => {
+        const lines = match.split('\n');
+        if (lines.length === 1) {
+            return '(**)';
+        } else {
+            // Multi-line: preserve newlines
+            return '(*' + '\n'.repeat(lines.length - 1) + '*)';
+        }
+    });
     return result;
 }
 
 export function isProgram(source: string) {
     const re = /\s?program\s+([\w.-]*);/i;
-    return !!re.test(stripComments(source));
+    return !!re.test(stripCommentsForDetection(source));
 }
 
 export function isUnit(source: string) {
     const re = /\s?unit\s+([\w.-]*);/i;
-    return !!re.test(stripComments(source));
+    return !!re.test(stripCommentsForDetection(source));
 }
 
 export function getUnitname(source: string) {

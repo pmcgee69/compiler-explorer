@@ -49,6 +49,7 @@ export class PascalWinCompiler extends BaseCompiler {
     mapFilename: string | null;
     dprFilename: string;
     projectBaseName: string;
+    isWrapperProgram: boolean;
 
     constructor(info: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(info, env);
@@ -58,6 +59,7 @@ export class PascalWinCompiler extends BaseCompiler {
         this.compileFilename = 'output.pas';
         this.dprFilename = 'prog.dpr';
         this.projectBaseName = 'prog';
+        this.isWrapperProgram = false;
     }
 
     override getSharedLibraryPathsAsArguments() {
@@ -142,6 +144,9 @@ export class PascalWinCompiler extends BaseCompiler {
     }
 
     override async writeAllFiles(dirPath: string, source: string, files: FiledataPair[]) {
+        // Strip comment content to avoid highlighting commented code
+        const cleanedSource = pascalUtils.stripComments(source);
+
         let inputFilename: string;
         if (pascalUtils.isProgram(source)) {
             // Use the program name from the source, like FPC does
@@ -156,7 +161,7 @@ export class PascalWinCompiler extends BaseCompiler {
             }
         }
 
-        await fs.writeFile(inputFilename, source);
+        await fs.writeFile(inputFilename, cleanedSource);
 
         if (files && files.length > 0) {
             await this.writeMultipleFiles(files, dirPath);
@@ -188,6 +193,7 @@ export class PascalWinCompiler extends BaseCompiler {
             // Input is already a .dpr program file, compile it directly (like FPC does)
             projectFile = inputFilename;
             projectBaseName = inputBasename.replace(/\.dpr$/i, '');
+            this.isWrapperProgram = false;
         } else {
             // Input is a .pas unit file, create a dummy prog.dpr project that uses it
             const unitFilepath = inputBasename;
@@ -195,6 +201,7 @@ export class PascalWinCompiler extends BaseCompiler {
             projectFile = path.join(tempPath, this.dprFilename);
             projectBaseName = 'prog';
             await this.saveDummyProjectFile(projectFile, unitName, unitFilepath);
+            this.isWrapperProgram = true;
         }
 
         this.projectBaseName = projectBaseName;
@@ -225,10 +232,13 @@ export class PascalWinCompiler extends BaseCompiler {
         filters.preProcessBinaryAsmLines = (asmLines: string[]) => {
             console.log(`[Delphi] Map filename: ${this.mapFilename}`);
             const mapFileReader = new MapFileReaderDelphi(unwrap(this.mapFilename));
+            // If this is a wrapper program (unit case), exclude prog.dpr segments
+            const excludedUnits = this.isWrapperProgram ? ['prog.dpr'] : [];
             const reconstructor = new PELabelReconstructor(
                 asmLines,
                 mapFileReader,
                 new Set([PELabelReconstructorOptions.DeleteBeforeFirstSegment]),
+                excludedUnits,
             );
             reconstructor.run('output');
 
@@ -237,6 +247,7 @@ export class PascalWinCompiler extends BaseCompiler {
             let fileCounter = 1;
             const result: string[] = [];
             let topLevelFileAdded = false;
+            let firstFilename: string | null = null;
 
             let sourceMarkerCount = 0;
             for (const line of reconstructor.asmLines) {
@@ -251,8 +262,18 @@ export class PascalWinCompiler extends BaseCompiler {
                         continue;
                     }
 
+                    // Track the first file we encounter
+                    if (firstFilename === null) {
+                        firstFilename = filename;
+                    }
+
+                    // Only use markers from the first file (skip wrapper prog.dpr if unit exists)
+                    if (filename !== firstFilename) {
+                        continue;
+                    }
+
                     sourceMarkerCount++;
-                    if (sourceMarkerCount <= 3) {
+                    if (sourceMarkerCount <= 10) {
                         console.log(`[Delphi] Source marker ${sourceMarkerCount}: file="${filename}" line=${lineNumber}`);
                     }
 
@@ -277,9 +298,57 @@ export class PascalWinCompiler extends BaseCompiler {
             }
 
             console.log(`[Delphi] Total source markers found: ${sourceMarkerCount}`);
-            return result;
+
+            // Truncate unmapped sections to max 5 lines
+            return this.truncateUnmappedSections(result);
         };
 
         return [];
+    }
+
+    /**
+     * Truncate sections with no source line mappings to max 5 lines
+     * This removes large finalization/initialization blocks that have no debug info
+     */
+    truncateUnmappedSections(asmLines: string[]): string[] {
+        const maxUnmappedLines = 5;
+        const sourceMarkerRegex = /^\s*\.loc\s+/;
+        const addressRegex = /^\s*[\da-f]+:/i;
+
+        let lineIdx = 0;
+        let unmappedCount = 0;
+        let unmappedStartIdx = -1;
+
+        while (lineIdx < asmLines.length) {
+            const line = asmLines[lineIdx];
+
+            if (sourceMarkerRegex.test(line)) {
+                // Found a source marker - reset counter
+                if (unmappedCount > maxUnmappedLines && unmappedStartIdx !== -1) {
+                    // Delete excess unmapped lines
+                    const deleteCount = unmappedCount - maxUnmappedLines;
+                    asmLines.splice(unmappedStartIdx + maxUnmappedLines, deleteCount);
+                    lineIdx -= deleteCount;
+                }
+                unmappedCount = 0;
+                unmappedStartIdx = -1;
+            } else if (addressRegex.test(line)) {
+                // This is an assembly line with an address
+                if (unmappedStartIdx === -1) {
+                    unmappedStartIdx = lineIdx;
+                }
+                unmappedCount++;
+            }
+
+            lineIdx++;
+        }
+
+        // Handle trailing unmapped section
+        if (unmappedCount > maxUnmappedLines && unmappedStartIdx !== -1) {
+            const deleteCount = unmappedCount - maxUnmappedLines;
+            asmLines.splice(unmappedStartIdx + maxUnmappedLines, deleteCount);
+        }
+
+        return asmLines;
     }
 }

@@ -171,6 +171,7 @@ export class MapFileReaderDelphi extends MapFileReader {
                 const lineNumObj = {
                     ...this.addressToObject(matches[2], matches[3]),
                     lineNumber: Number.parseInt(matches[1], 10),
+                    filename: this.currentLineNumbersFilename,
                 };
                 this.lineNumbers.push(lineNumObj);
 
