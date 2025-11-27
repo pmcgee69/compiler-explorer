@@ -231,7 +231,6 @@ export class PascalWinCompiler extends BaseCompiler {
             let fileCounter = 1;
             const result: string[] = [];
             let topLevelFileAdded = false;
-            let firstFilename: string | null = null;
 
             for (const line of reconstructor.asmLines) {
                 const sourceMatch = line.match(/^\/app\/(.+):(\d+)$/);
@@ -245,13 +244,8 @@ export class PascalWinCompiler extends BaseCompiler {
                         continue;
                     }
 
-                    // Track the first file we encounter
-                    if (firstFilename === null) {
-                        firstFilename = filename;
-                    }
-
-                    // Only use markers from the first file (skip wrapper prog.dpr if unit exists)
-                    if (filename !== firstFilename) {
+                    // If using a wrapper program, skip prog.dpr markers (only show user's unit code)
+                    if (this.isWrapperProgram && filename === 'prog.dpr') {
                         continue;
                     }
 
