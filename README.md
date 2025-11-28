@@ -11,6 +11,17 @@
 
 [See **_Windows install_** guideline for Delphi & fpc **_here_**](docs/DelphiCppBuilderSpecifics.md)
 
+
+
+[Demonstration - Local Compiler Explorer - 2025](https://youtu.be/yPOwvKojM7s)
+
+
+
+
+[![Youtube Video](https://github.com/user-attachments/assets/865b9e5c-82a5-42dd-89c0-5e5ea4883d79)](https://youtu.be/yPOwvKojM7s)
+
+
+
 ---
 
 **Compiler Explorer** is an interactive compiler exploration website. Edit C, C++, Rust, Go, D, Haskell, Swift, Pascal, [ispc](https://ispc.github.io/) or other language code, and see how that code looks after being compiled in real time.
