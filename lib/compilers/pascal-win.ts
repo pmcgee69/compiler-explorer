@@ -216,6 +216,14 @@ export class PascalWinCompiler extends BaseCompiler {
         filters.dontMaskFilenames = true;
         filters.preProcessBinaryAsmLines = (asmLines: string[]) => {
             const mapFileReader = new MapFileReaderDelphi(unwrap(this.mapFilename));
+
+            // Try to read map file - if it fails, continue with empty map data (no source highlighting)
+            try {
+                mapFileReader.run();
+            } catch (error) {
+                // Map file missing or unreadable - assembly will be shown without source mapping
+            }
+
             // If this is a wrapper program (unit case), exclude prog.dpr segments
             const excludedUnits = this.isWrapperProgram ? ['prog.dpr'] : [];
             const reconstructor = new PELabelReconstructor(
@@ -281,44 +289,30 @@ export class PascalWinCompiler extends BaseCompiler {
      * This removes large finalization/initialization blocks that have no debug info
      */
     truncateUnmappedSections(asmLines: string[]): string[] {
-        const maxUnmappedLines = 5;
-        const sourceMarkerRegex = /^\s*\.loc\s+/;
-        const addressRegex = /^\s*[\da-f]+:/i;
+        const sourceMarkerRegex  = /^\s*\.loc\s+/;
+        const addressRegex       = /^\s*[\da-f]+:/i;
+        const result: string[]   = [];
+        const maxUnmappedLines   = 5;
+        let currentUnmappedCount = 0;
 
-        let lineIdx = 0;
-        let unmappedCount = 0;
-        let unmappedStartIdx = -1;
-
-        while (lineIdx < asmLines.length) {
-            const line = asmLines[lineIdx];
-
-            if (sourceMarkerRegex.test(line)) {
-                // Found a source marker - reset counter
-                if (unmappedCount > maxUnmappedLines && unmappedStartIdx !== -1) {
-                    // Delete excess unmapped lines
-                    const deleteCount = unmappedCount - maxUnmappedLines;
-                    asmLines.splice(unmappedStartIdx + maxUnmappedLines, deleteCount);
-                    lineIdx -= deleteCount;
-                }
-                unmappedCount = 0;
-                unmappedStartIdx = -1;
-            } else if (addressRegex.test(line)) {
-                // This is an assembly line with an address
-                if (unmappedStartIdx === -1) {
-                    unmappedStartIdx = lineIdx;
-                }
-                unmappedCount++;
+        for (const line of asmLines) {
+            if (sourceMarkerRegex.test(line))    // Reset counter when we hit a source marker
+            {
+                currentUnmappedCount = 0;
+                result.push(line);
             }
-
-            lineIdx++;
+            else if (addressRegex.test(line))    // Address line - only keep if under limit
+            {
+                if (currentUnmappedCount < maxUnmappedLines) {
+                    result.push(line);
+                    currentUnmappedCount++;
+                }
+            }
+            else
+            {
+                result.push(line);               // Other lines (labels, directives) - always keep
+            }
         }
-
-        // Handle trailing unmapped section
-        if (unmappedCount > maxUnmappedLines && unmappedStartIdx !== -1) {
-            const deleteCount = unmappedCount - maxUnmappedLines;
-            asmLines.splice(unmappedStartIdx + maxUnmappedLines, deleteCount);
-        }
-
-        return asmLines;
+        return result;
     }
 }
