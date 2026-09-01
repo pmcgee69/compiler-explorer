@@ -40,7 +40,7 @@ import {copyNeededDlls} from '../binaries/win-utils.js';
 import {CompilationEnvironment} from '../compilation-env.js';
 import {MapFileReaderVS} from '../mapfiles/map-file-vs.js';
 import {VcAsmParser} from '../parsers/asm-parser-vc.js';
-import {PELabelReconstructor} from '../pe32-support.js';
+import {PELabelReconstructor, PELabelReconstructorOptions} from '../pe32-support.js';
 
 export class Win32Compiler extends BaseCompiler {
     static get key() {
@@ -252,7 +252,7 @@ export class Win32Compiler extends BaseCompiler {
             const mapFileReader = new MapFileReaderVS(mapFilename);
 
             filters.preProcessBinaryAsmLines = asmLines => {
-                const reconstructor = new PELabelReconstructor(asmLines, false, mapFileReader);
+                const reconstructor = new PELabelReconstructor(asmLines, mapFileReader);
                 reconstructor.run('output.s.obj');
 
                 return reconstructor.asmLines;

@@ -29,9 +29,11 @@ export class MapFileReaderDelphi extends MapFileReader {
     regexDelphiCodeSegment = /^\s([\da-f]*):([\da-f]*)\s*([\da-f]*)\s*c=code\s*s=.text\s*g=.*m=([\w.]*)\s.*/i;
     regexDelphiICodeSegment = /^\s([\da-f]*):([\da-f]*)\s*([\da-f]*)\s*c=icode\s*s=.itext\s*g=.*m=([\w.]*)\s.*/i;
     regexDelphiNames = /^\s([\da-f]*):([\da-f]*)\s*([\w$.<>@{}]*)$/i;
-    regexDelphiLineNumbersStart = /line numbers for (.*)\(.*\) segment \.text/i;
-    regexDelphiLineNumber = /^(\d*)\s([\da-f]*):([\da-f]*)/i;
-    regexDelphiLineNumbersStartIText = /line numbers for (.*)\(.*\) segment \.itext/i;
+    regexDelphiLineNumbersStart = /line numbers for (.*)\((.*)\) segment \.text/i;
+    regexDelphiLineNumber = /^\s*(\d+)\s+([\da-f]+):([\da-f]+)/i;
+    regexDelphiLineNumbersStartIText = /line numbers for (.*)\((.*)\) segment \.itext/i;
+    currentLineNumbersFilename: string | null = null;
+    moduleToFilename: Map<string, string> = new Map();
 
     /**
      * Tries to match the given line to code segment information
@@ -90,8 +92,64 @@ export class MapFileReaderDelphi extends MapFileReader {
         }
     }
 
+    override run() {
+        // First pass: read the map file
+        super.run();
+
+        // Second pass: fix unitName for segments using the module-to-filename mapping
+        this.fixSegmentUnitNames();
+    }
+
+    fixSegmentUnitNames() {
+        for (const segment of this.segments) {
+            // Extract module name from current unitName (remove .pas or .dpr extension)
+            const moduleName = segment.unitName?.replace(/\.(pas|dpr)$/i, '') || '';
+            if (this.moduleToFilename.has(moduleName)) {
+                segment.unitName = this.moduleToFilename.get(moduleName)!;
+            }
+        }
+        for (const segment of this.isegments) {
+            const moduleName = segment.unitName?.replace(/\.(pas|dpr)$/i, '') || '';
+            if (this.moduleToFilename.has(moduleName)) {
+                segment.unitName = this.moduleToFilename.get(moduleName)!;
+            }
+        }
+    }
+
+    override getSegmentInfoByStartingAddress(segment: string | undefined, address: number) {
+        // Check regular segments first
+        let result = super.getSegmentInfoByStartingAddress(segment, address);
+        if (result) return result;
+
+        // Also check isegments (for x86 .itext segments)
+        for (let idx = 0; idx < this.isegments.length; idx++) {
+            const info = this.isegments[idx];
+            if (!segment && info.addressInt === address) {
+                return info;
+            }
+            if (info.segment === segment && info.addressWithoutOffset === address) {
+                return info;
+            }
+        }
+
+        return undefined;
+    }
+
     override isStartOfLineNumbers(line: string) {
-        const matches = line.match(this.regexDelphiLineNumbersStart);
+        // Check both .text and .itext segments
+        let matches = line.match(this.regexDelphiLineNumbersStart);
+        if (!matches) {
+            matches = line.match(this.regexDelphiLineNumbersStartIText);
+        }
+
+        if (matches) {
+            // Extract module name and actual filename from the path in parentheses
+            const moduleName = matches[1];
+            const fullPath = matches[2];
+            const filename = fullPath.split('\\').pop() || fullPath.split('/').pop() || fullPath;
+            this.currentLineNumbersFilename = filename;
+            this.moduleToFilename.set(moduleName, filename);
+        }
         return !!matches;
     }
 
@@ -105,10 +163,12 @@ export class MapFileReaderDelphi extends MapFileReader {
         for (const reference of references) {
             const matches = reference.match(this.regexDelphiLineNumber);
             if (matches) {
-                this.lineNumbers.push({
+                const lineNumObj = {
                     ...this.addressToObject(matches[2], matches[3]),
                     lineNumber: Number.parseInt(matches[1], 10),
-                });
+                    filename: this.currentLineNumbersFilename,
+                };
+                this.lineNumbers.push(lineNumObj);
 
                 hasLineNumbers = true;
             }

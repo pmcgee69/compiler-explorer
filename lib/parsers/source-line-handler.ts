@@ -56,7 +56,9 @@ export class SourceLineHandler {
     }
 
     private createSource(file: string, line: number, context: SourceHandlerContext, column?: number): AsmResultSource {
-        const isMainSource = this.stdInLooking.test(file);
+        // Check if this is main source: either matches stdInLooking pattern, or is a simple filename without path separators
+        const isSimpleFilename = !file.includes('/') && !file.includes('\\');
+        const isMainSource = this.stdInLooking.test(file) || isSimpleFilename;
         const source: AsmResultSource = context.dontMaskFilenames
             ? {
                   file,

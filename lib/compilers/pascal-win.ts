@@ -36,7 +36,7 @@ import {unwrap} from '../assert.js';
 import {BaseCompiler} from '../base-compiler.js';
 import {CompilationEnvironment} from '../compilation-env.js';
 import {MapFileReaderDelphi} from '../mapfiles/map-file-delphi.js';
-import {PELabelReconstructor} from '../pe32-support.js';
+import {PELabelReconstructor, PELabelReconstructorOptions} from '../pe32-support.js';
 import * as utils from '../utils.js';
 
 import * as pascalUtils from './pascal-utils.js';
@@ -48,6 +48,8 @@ export class PascalWinCompiler extends BaseCompiler {
 
     mapFilename: string | null;
     dprFilename: string;
+    projectBaseName: string;
+    isWrapperProgram: boolean;
 
     constructor(info: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(info, env);
@@ -56,6 +58,8 @@ export class PascalWinCompiler extends BaseCompiler {
         this.mapFilename = null;
         this.compileFilename = 'output.pas';
         this.dprFilename = 'prog.dpr';
+        this.projectBaseName = 'prog';
+        this.isWrapperProgram = false;
     }
 
     override getSharedLibraryPathsAsArguments() {
@@ -77,11 +81,11 @@ export class PascalWinCompiler extends BaseCompiler {
     }
 
     override getExecutableFilename(dirPath: string) {
-        return path.join(dirPath, 'prog.exe');
+        return path.join(dirPath, this.projectBaseName + '.exe');
     }
 
     override getOutputFilename(dirPath: string) {
-        return path.join(dirPath, 'prog.exe');
+        return path.join(dirPath, this.projectBaseName + '.exe');
     }
 
     override filename(fn: string) {
@@ -100,7 +104,7 @@ export class PascalWinCompiler extends BaseCompiler {
             outputFilename = this.getOutputFilename(path.dirname(outputFilename));
         }
 
-        let args = [...this.compiler.objdumperArgs, '-d', outputFilename];
+        let args = [...this.compiler.objdumperArgs, '-d', '-l', outputFilename];
         if (intelAsm) args = args.concat(['-M', 'intel']);
         return this.exec(this.compiler.objdumper, args, {maxOutput: 1024 * 1024 * 1024}).then(objResult => {
             if (objResult.code === 0) {
@@ -125,9 +129,14 @@ export class PascalWinCompiler extends BaseCompiler {
     }
 
     override async writeAllFiles(dirPath: string, source: string, files: FiledataPair[]) {
+        // Strip comment content to avoid highlighting commented code
+        const cleanedSource = pascalUtils.stripComments(source);
+
         let inputFilename: string;
         if (pascalUtils.isProgram(source)) {
-            inputFilename = path.join(dirPath, this.dprFilename);
+            // Use the program name from the source, like FPC does
+            const progName = pascalUtils.getProgName(source);
+            inputFilename = path.join(dirPath, progName + '.dpr');
         } else {
             const unitName = pascalUtils.getUnitname(source);
             if (unitName) {
@@ -137,7 +146,7 @@ export class PascalWinCompiler extends BaseCompiler {
             }
         }
 
-        await fs.writeFile(inputFilename, source);
+        await fs.writeFile(inputFilename, cleanedSource);
 
         if (files && files.length > 0) {
             await this.writeMultipleFiles(files, dirPath);
@@ -158,24 +167,36 @@ export class PascalWinCompiler extends BaseCompiler {
             execOptions = this.getDefaultExecOptions();
         }
 
-        const alreadyHasDPR = path.basename(inputFilename) === this.dprFilename;
-
         const tempPath = path.dirname(inputFilename);
-        const projectFile = path.join(tempPath, this.dprFilename);
+        const inputBasename = path.basename(inputFilename);
+        const isDprFile = inputBasename.toLowerCase().endsWith('.dpr');
 
-        this.mapFilename = path.join(tempPath, 'prog.map');
+        let projectFile: string;
+        let projectBaseName: string;
+
+        if (isDprFile) {
+            // Input is already a .dpr program file, compile it directly (like FPC does)
+            projectFile = inputFilename;
+            projectBaseName = inputBasename.replace(/\.dpr$/i, '');
+            this.isWrapperProgram = false;
+        } else {
+            // Input is a .pas unit file, create a dummy prog.dpr project that uses it
+            const unitFilepath = inputBasename;
+            const unitName = unitFilepath.replace(/\.pas$/i, '');
+            projectFile = path.join(tempPath, this.dprFilename);
+            projectBaseName = 'prog';
+            await this.saveDummyProjectFile(projectFile, unitName, unitFilepath);
+            this.isWrapperProgram = true;
+        }
+
+        this.projectBaseName = projectBaseName;
+        this.mapFilename = path.join(tempPath, projectBaseName + '.map');
 
         inputFilename = inputFilename.replaceAll('/', '\\');
 
-        if (!alreadyHasDPR) {
-            const unitFilepath = path.basename(inputFilename);
-            const unitName = unitFilepath.replace(/.pas$/i, '');
-            await this.saveDummyProjectFile(projectFile, unitName, unitFilepath);
-        }
-
         options.pop();
 
-        options.unshift('-CC', '-W', '-H', '-GD', '-$D+', '-V', '-B');
+        options.unshift('-CC', '-W', '-H', '-GD', '-$D+', '-$L+', '-$O-', '-$W+', '-$C-', '-V', '-B');
 
         options.push(projectFile);
         execOptions.customCwd = tempPath;
@@ -195,12 +216,103 @@ export class PascalWinCompiler extends BaseCompiler {
         filters.dontMaskFilenames = true;
         filters.preProcessBinaryAsmLines = (asmLines: string[]) => {
             const mapFileReader = new MapFileReaderDelphi(unwrap(this.mapFilename));
-            const reconstructor = new PELabelReconstructor(asmLines, false, mapFileReader, false);
+
+            // Try to read map file - if it fails, continue with empty map data (no source highlighting)
+            try {
+                mapFileReader.run();
+            } catch (error) {
+                // Map file missing or unreadable - assembly will be shown without source mapping
+            }
+
+            // If this is a wrapper program (unit case), exclude prog.dpr segments
+            const excludedUnits = this.isWrapperProgram ? ['prog.dpr'] : [];
+            const reconstructor = new PELabelReconstructor(
+                asmLines,
+                mapFileReader,
+                new Set([PELabelReconstructorOptions.DeleteBeforeFirstSegment]),
+                excludedUnits,
+            );
             reconstructor.run('output');
 
-            return reconstructor.asmLines;
+            // Convert source line markers from /app/filename:line format to .loc directives
+            const fileMap = new Map<string, number>();
+            let fileCounter = 1;
+            const result: string[] = [];
+            let topLevelFileAdded = false;
+
+            for (const line of reconstructor.asmLines) {
+                const sourceMatch = line.match(/^\/app\/(.+):(\d+)$/);
+                if (sourceMatch) {
+                    const filename = sourceMatch[1];
+                    const lineNumber = sourceMatch[2];
+
+                    // Skip line 0 markers - they indicate no line info available
+                    // Let the previous source line continue instead of breaking highlighting
+                    if (lineNumber === '0') {
+                        continue;
+                    }
+
+                    // If using a wrapper program, skip prog.dpr markers (only show user's unit code)
+                    if (this.isWrapperProgram && filename === 'prog.dpr') {
+                        continue;
+                    }
+
+                    // Add top-level .file directive once at the very beginning (like FPC does)
+                    if (!topLevelFileAdded) {
+                        result.unshift(`\t.file "${filename}"`);
+                        topLevelFileAdded = true;
+                    }
+
+                    // Get or assign file number for DWARF debug info
+                    if (!fileMap.has(filename)) {
+                        const fileNum = fileCounter++;
+                        fileMap.set(filename, fileNum);
+                        result.push(`\t.file ${fileNum} "${filename}"`);
+                    }
+
+                    const fileNum = fileMap.get(filename)!;
+                    result.push(`\t.loc ${fileNum} ${lineNumber} 0`);
+                } else {
+                    result.push(line);
+                }
+            }
+
+            // Truncate unmapped sections to max 5 lines
+            return this.truncateUnmappedSections(result);
         };
 
         return [];
+    }
+
+    /**
+     * Truncate sections with no source line mappings to max 5 lines
+     * This removes large finalization/initialization blocks that have no debug info
+     */
+    truncateUnmappedSections(asmLines: string[]): string[] {
+        const sourceMarkerRegex  = /^\s*\.loc\s+/;
+        const addressRegex       = /^\s*[\da-f]+:/i;
+        const result: string[]   = [];
+        const maxUnmappedLines   = 5;
+        let currentUnmappedCount = 0;
+
+        for (const line of asmLines) {
+            if (sourceMarkerRegex.test(line))    // Reset counter when we hit a source marker
+            {
+                currentUnmappedCount = 0;
+                result.push(line);
+            }
+            else if (addressRegex.test(line))    // Address line - only keep if under limit
+            {
+                if (currentUnmappedCount < maxUnmappedLines) {
+                    result.push(line);
+                    currentUnmappedCount++;
+                }
+            }
+            else
+            {
+                result.push(line);               // Other lines (labels, directives) - always keep
+            }
+        }
+        return result;
     }
 }

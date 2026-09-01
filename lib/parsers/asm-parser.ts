@@ -625,6 +625,13 @@ export class AsmParser extends AsmRegex implements IAsmParser {
 
         if (filters.preProcessBinaryAsmLines) asmLines = filters.preProcessBinaryAsmLines(asmLines);
 
+        // Parse .file directives to build file number -> filename mapping
+        const files = this.parseFiles(asmLines);
+        const sourceContext: SourceHandlerContext = {
+            files: files,
+            dontMaskFilenames: dontMaskFilenames || false,
+        };
+
         for (const line of asmLines) {
             const labelsInLine: AsmResultLabel[] = [];
 
@@ -651,6 +658,13 @@ export class AsmParser extends AsmRegex implements IAsmParser {
                     source = {file: null, line: Number.parseInt(match.groups.line, 10), mainsource: true};
                 }
                 continue;
+            }
+
+            // Handle .file and .loc directives (DWARF debug info)
+            const sourceResult = this.sourceLineHandler.processSourceLine(line, sourceContext);
+            if (sourceResult.source !== undefined) {
+                source = sourceResult.source;
+                continue; // Don't display the directive itself
             }
 
             match = line.match(this.labelRe);
