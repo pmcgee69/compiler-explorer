@@ -133,11 +133,19 @@ export class FPCCompiler extends BaseCompiler {
 
     override getExecutableFilename(dirPath: string, outputFilebase: string, key?: CacheKey | CompilationCacheKey) {
         const source = (key && (key as CacheKey).source) || '';
+        let progName;
         if (key && pascalUtils.isProgram(source)) {
-            return path.join(dirPath, pascalUtils.getProgName(source));
+            progName = pascalUtils.getProgName(source);
+        } else {
+            progName = 'prog';
         }
 
-        return path.join(dirPath, 'prog');
+        // Add .exe extension on Windows (process.platform is 'win32' for all Windows)
+        if (process.platform === 'win32' && !progName.endsWith('.exe')) {
+            progName += '.exe';
+        }
+
+        return path.join(dirPath, progName);
     }
 
     override async objdump(

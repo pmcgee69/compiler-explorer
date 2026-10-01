@@ -1,0 +1,48 @@
+# Delphi & C++Builder Specifics
+
+```The original basis document: https://github.com/compiler-explorer/compiler-explorer/blob/main/docs/WindowsNative.md```
+
+## Installation
+
+- Install latest Node.js (my current = v14.17.0)
+- Install latest npm (my current = 7.14.0)
+
+- Clone this branch of Compiler Explorer repository into a directory: https://github.com/compiler-explorer/compiler-explorer
+
+  ie https://github.com/pmcgee69/compiler-explorer/edit/CE-for-Win-Pascal
+
+In the directory, run:
+- npm install
+- npm install webpack -g
+- npm install webpack-cli -g
+- npm update webpack
+
+You may need to fix up some directories... maybe comment out eg the C++ options. Changes were made to the following files from this repo:
+
+- \lib\languages.js - Comment out languages as desired.
+- \lib\languages.PasWin.js
+
+For Object Pascal compilers:
+- \lib\compilers\pascal.js
+- \lib\compilers\pascal-win.js
+- \etc\config\pascal.defaults.properties
+
+For C++ compilers:
+- \etc\config\c++.win32.properties
+- \etc\config\c++.local.properties
+
+Finally:
+- npm start
+
+To access Compiler Explorer, browse to: (http://localhost:10240/)
+
+## Screenshots
+
+//   ---   ---   ---   ---   ---   ---   ---   ---
+![Install](https://user-images.githubusercontent.com/11953157/120332379-455d1f80-c321-11eb-85ae-e9cd31cc9814.png)
+//   ---   ---   ---   ---   ---   ---   ---   ---
+![Start Server](https://user-images.githubusercontent.com/11953157/120332478-5d34a380-c321-11eb-9bd5-a2a86447e963.png)
+//   ---   ---   ---   ---   ---   ---   ---   ---
+![Compiler Explorer - Object Pascal](https://user-images.githubusercontent.com/11953157/120333650-7b4ed380-c322-11eb-8042-5b1d710a5814.png)
+//   ---   ---   ---   ---   ---   ---   ---   ---
+![Compiler Explorer - C++](https://user-images.githubusercontent.com/11953157/120351986-eaccbf00-c332-11eb-939c-a0338e333945.png)
